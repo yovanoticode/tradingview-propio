@@ -33,10 +33,40 @@ function getETMinutes(utcSeconds: number): number {
   return h * 60 + m;
 }
 
-function getETDateKey(utcSeconds: number): string {
-  return new Date(utcSeconds * 1000).toLocaleDateString("en-CA", {
+function getETDateKey(utcSeconds: number, cmeShift = false): string {
+  const d = new Date(utcSeconds * 1000);
+  const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", hour12: false
   });
+  const parts = fmt.formatToParts(d);
+  const get = (t: string) => parseInt(parts.find((p) => p.type === t)?.value ?? "0");
+  const hRaw = get("hour");
+  const h = hRaw === 24 ? 0 : hRaw;
+
+  const localD = new Date(get("year"), get("month") - 1, get("day"));
+  if (cmeShift && h >= 18) {
+    localD.setDate(localD.getDate() + 1);
+  }
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${localD.getFullYear()}-${pad(localD.getMonth() + 1)}-${pad(localD.getDate())}`;
+}
+
+function getETWeekKey(utcSeconds: number, cmeShift = false): string {
+  const dateKey = getETDateKey(utcSeconds, cmeShift);
+  const [y, m, day] = dateKey.split("-").map(Number);
+  const date = new Date(y, m - 1, day);
+  const dow = date.getDay();
+  const sunday = new Date(date);
+  sunday.setDate(date.getDate() - dow);
+  return sunday.toISOString().slice(0, 10);
+}
+
+function getETMonthKey(utcSeconds: number, cmeShift = false): string {
+  const dateKey = getETDateKey(utcSeconds, cmeShift);
+  return dateKey.slice(0, 7);
 }
 
 function getETDOW(utcSeconds: number): number {
@@ -45,24 +75,6 @@ function getETDOW(utcSeconds: number): number {
     weekday: "short",
   });
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(s);
-}
-
-function getETWeekKey(utcSeconds: number): string {
-  const d = new Date(utcSeconds * 1000);
-  const etStr = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-  const [y, m, day] = etStr.split("-").map(Number);
-  const date = new Date(y, m - 1, day);
-  const dow = date.getDay();
-  const sunday = new Date(date);
-  sunday.setDate(date.getDate() - dow);
-  return sunday.toISOString().slice(0, 10);
-}
-
-function getETMonthKey(utcSeconds: number): string {
-  return new Date(utcSeconds * 1000).toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric", month: "2-digit",
-  }).slice(0, 7); // "YYYY-MM"
 }
 
 // ── Opening Prices ────────────────────────────────────────────────────────
@@ -79,11 +91,14 @@ export function calculateOpeningPrices(
     // Group by ET date; find candle closest to target time (>=)
     const byDate = new Map<string, Candle[]>();
     for (const c of candles) {
-      byDate.set(getETDateKey(c.time), [...(byDate.get(getETDateKey(c.time)) ?? []), c]);
+      const k = getETDateKey(c.time, config.dwm.cmeShift);
+      byDate.set(k, [...(byDate.get(k) ?? []), c]);
     }
 
     const dates = [...byDate.keys()].sort();
     for (let i = 0; i < dates.length; i++) {
+      if (config.openingPricesOnlyToday && i < dates.length - 1) continue;
+
       const dayCandles = byDate.get(dates[i])!;
       const match = dayCandles
         .filter((c) => getETMinutes(c.time) >= target)
@@ -118,7 +133,7 @@ export function calculateOpeningPrices(
 export function calculateDWM(candles: Candle[], config: IctConfig): HorizLevel[] {
   const { dwm } = config;
   const levels: HorizLevel[] = [];
-  if (!dwm.showDOpen && !dwm.showDHL && !dwm.showWOpen && !dwm.showWHL && !dwm.showMOpen && !dwm.showMHL) {
+  if (!dwm.showDOpen && !dwm.showDHL && !dwm.showPDHL && !dwm.showWOpen && !dwm.showWHL && !dwm.showPWHL && !dwm.showMOpen && !dwm.showMHL && !dwm.showPMHL) {
     return levels;
   }
 
@@ -128,10 +143,10 @@ export function calculateDWM(candles: Candle[], config: IctConfig): HorizLevel[]
     nextKey?: string;
   }
 
-  function buildGroups(keyFn: (t: number) => string): PeriodGroup[] {
+  function buildGroups(keyFn: (t: number, cmeShift: boolean) => string): PeriodGroup[] {
     const map = new Map<string, Candle[]>();
     for (const c of candles) {
-      const k = keyFn(c.time);
+      const k = keyFn(c.time, dwm.cmeShift);
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(c);
     }
@@ -146,11 +161,13 @@ export function calculateDWM(candles: Candle[], config: IctConfig): HorizLevel[]
   function pushLevels(
     groups: PeriodGroup[],
     showOpen: boolean,
-    showHL: boolean,
+    showCurrHL: boolean,
+    showPrevHL: boolean,
     color: string,
     prefix: string,
   ) {
-    for (const g of groups) {
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
       if (g.candles.length === 0) continue;
       const sorted = [...g.candles].sort((a, b) => a.time - b.time);
       const open = sorted[0].open;
@@ -163,21 +180,33 @@ export function calculateDWM(candles: Candle[], config: IctConfig): HorizLevel[]
       if (showOpen) {
         levels.push({ startTime, endTime, price: open, label: `${prefix}O`, color, extend: isLast, dash: false });
       }
-      if (showHL) {
+      
+      if (showCurrHL) {
         levels.push({ startTime, endTime, price: high, label: `${prefix}H`, color, extend: isLast, dash: true });
         levels.push({ startTime, endTime, price: low,  label: `${prefix}L`, color, extend: isLast, dash: true });
+      }
+
+      if (showPrevHL && i > 0) {
+        const prevGroup = groups[i - 1];
+        if (prevGroup && prevGroup.candles.length > 0) {
+          const prevHigh = Math.max(...prevGroup.candles.map((c) => c.high));
+          const prevLow = Math.min(...prevGroup.candles.map((c) => c.low));
+          
+          levels.push({ startTime, endTime, price: prevHigh, label: `P${prefix}H`, color, extend: isLast, dash: true });
+          levels.push({ startTime, endTime, price: prevLow,  label: `P${prefix}L`, color, extend: isLast, dash: true });
+        }
       }
     }
   }
 
-  if (dwm.showDOpen || dwm.showDHL) {
-    pushLevels(buildGroups(getETDateKey), dwm.showDOpen, dwm.showDHL, dwm.dColor, "D");
+  if (dwm.showDOpen || dwm.showDHL || dwm.showPDHL) {
+    pushLevels(buildGroups(getETDateKey), dwm.showDOpen, dwm.showDHL, dwm.showPDHL, dwm.dColor, "D");
   }
-  if (dwm.showWOpen || dwm.showWHL) {
-    pushLevels(buildGroups(getETWeekKey), dwm.showWOpen, dwm.showWHL, dwm.wColor, "W");
+  if (dwm.showWOpen || dwm.showWHL || dwm.showPWHL) {
+    pushLevels(buildGroups(getETWeekKey), dwm.showWOpen, dwm.showWHL, dwm.showPWHL, dwm.wColor, "W");
   }
-  if (dwm.showMOpen || dwm.showMHL) {
-    pushLevels(buildGroups(getETMonthKey), dwm.showMOpen, dwm.showMHL, dwm.mColor, "M");
+  if (dwm.showMOpen || dwm.showMHL || dwm.showPMHL) {
+    pushLevels(buildGroups(getETMonthKey), dwm.showMOpen, dwm.showMHL, dwm.showPMHL, dwm.mColor, "M");
   }
 
   return levels;

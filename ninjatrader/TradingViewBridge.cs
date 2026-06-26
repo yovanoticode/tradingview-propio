@@ -137,6 +137,9 @@ namespace NinjaTrader.NinjaScript.Strategies
             res.Headers["Access-Control-Allow-Origin"]  = "*";
             res.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
             res.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+            res.Headers["Cache-Control"]                = "no-cache, no-store, must-revalidate";
+            res.Headers["Pragma"]                       = "no-cache";
+            res.Headers["Expires"]                      = "0";
 
             if (req.HttpMethod == "OPTIONS")
             {
@@ -540,8 +543,14 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         private static long ToUnixSeconds(DateTime dt)
         {
-            var local = DateTime.SpecifyKind(dt, DateTimeKind.Local);
-            return (long)(local.ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+            DateTime utc;
+            if (dt.Kind == DateTimeKind.Utc)
+                utc = dt;
+            else if (dt.Kind == DateTimeKind.Local)
+                utc = dt.ToUniversalTime();
+            else
+                utc = DateTime.SpecifyKind(dt, DateTimeKind.Local).ToUniversalTime();
+            return (long)(utc - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
         }
 
         private static string ParseString(string query, string key, string def)

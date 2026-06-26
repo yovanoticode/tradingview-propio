@@ -67,13 +67,15 @@ export function LevelsOverlay({
 
   // ── Horizontal level renderer ─────────────────────────────────
   function renderHorizLevels(levels: HorizLevel[]) {
+    const paneWidth = ts.width();
+    
     for (const lvl of levels) {
       const x1 = ts.timeToCoordinate(lvl.startTime as UTCTimestamp);
       if (x1 === null) continue;
       const y = series.priceToCoordinate(lvl.price);
       if (y === null) continue;
 
-      const x2 = lvl.extend ? EXTEND_X : (ts.timeToCoordinate(lvl.endTime as UTCTimestamp) ?? EXTEND_X);
+      const x2 = lvl.extend ? paneWidth : (ts.timeToCoordinate(lvl.endTime as UTCTimestamp) ?? paneWidth);
 
       elements.push(
         <line
@@ -91,12 +93,12 @@ export function LevelsOverlay({
         elements.push(
           <text
             key={`hl-label-${lvl.startTime}-${lvl.price}-${lvl.label}`}
-            x={x2 === EXTEND_X ? x1 + 3 : x2 - 3}
-            y={y - 3}
+            x={lvl.extend ? paneWidth - 6 : x2 - 3}
+            y={y - 4}
             fontSize={fs}
             fill={lvl.color}
-            textAnchor={x2 === EXTEND_X ? "start" : "end"}
-            style={{ userSelect: "none", fontFamily: "system-ui, sans-serif" }}
+            textAnchor="end"
+            style={{ userSelect: "none", fontFamily: "system-ui, sans-serif", fontWeight: 600 }}
           >
             {lvl.label}
           </text>,

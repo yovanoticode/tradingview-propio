@@ -15,11 +15,15 @@ export function BottomPanel() {
     let cancelled = false;
     setT(null);
     const load = () => {
+      if (symbol === "NQ100") return;
       fetchTicker24h(symbol)
         .then((x) => {
           if (!cancelled) setT(x);
         })
-        .catch(console.error);
+        .catch((err) => {
+          // silently ignore in UI to avoid Next.js dev overlay, but log as warn
+          console.warn(err.message);
+        });
     };
     load();
     const id = setInterval(load, 5000);

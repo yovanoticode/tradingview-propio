@@ -48,14 +48,24 @@ export function TabBar() {
         })}
       </div>
 
-      <button
-        onClick={() => addTab()}
-        className="flex h-full items-center px-3 text-tv-text-muted hover:bg-tv-panel hover:text-tv-text"
-        title="Nueva pestaña"
-        aria-label="Nueva pestaña"
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex items-center h-full">
+        <button
+          onClick={() => addTab()}
+          className="flex h-full items-center px-3 text-tv-text-muted hover:bg-tv-panel hover:text-tv-text"
+          title="Nuevo gráfico"
+          aria-label="Nuevo gráfico"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => addTab("NQ100", "1d", "heatmap")}
+          className="flex h-full items-center px-3 text-tv-text-muted hover:bg-tv-panel hover:text-tv-text border-l border-tv-border"
+          title="Mapa de calor (Nasdaq 100)"
+          aria-label="Mapa de calor"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        </button>
+      </div>
     </div>
   );
 }

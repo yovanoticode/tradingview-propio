@@ -12,6 +12,7 @@ if errorlevel 1 (
 
 echo Liberando puerto 3000...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 "') do taskkill /PID %%a /F 2>nul
-timeout /t 1 /nobreak >nul
-start "" http://localhost:3000
+echo Iniciando servidor de Next.js...
+echo El navegador se abrira automaticamente en 5 segundos...
+start "" cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:3000"
 npm run dev

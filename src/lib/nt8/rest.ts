@@ -1,47 +1,80 @@
 import type { Candle, Timeframe } from "@/lib/yahoo/types";
 
+
+
+import { useChartStore } from "@/lib/store/chart-store";
+
 const NT8_BASE = "http://localhost:4001";
 
-/**
- * NT8 corre en Colombia (UTC-5) y trata los tiempos ET de las barras
- * como hora local colombiana. Esto añade 5h en vez de 4h (EDT) al UTC,
- * dejando los timestamps 1 hora adelantados en verano.
- * Corrección dinámica: descuenta la diferencia (Colombia - ET en el momento actual).
- */
-function nt8TimestampCorrection(): number {
-  const now = new Date();
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(now);
-  const get = (t: string) => parseInt(parts.find((p) => p.type === t)?.value ?? "0");
-  const h = get("hour") === 24 ? 0 : get("hour");
-  // epoch que ET vería si sus horas locales fueran UTC
-  const etAsUtc = Date.UTC(get("year"), get("month") - 1, get("day"), h, get("minute"), get("second"));
-  // offset de ET respecto a UTC en segundos (p.ej. -14400 en EDT)
-  const etOffsetSec = Math.round((etAsUtc - now.getTime()) / 1000);
-  // Colombia siempre UTC-5 = -18000s
-  // correction = abs(ET offset) - abs(Colombia offset) = (-etOffsetSec) - 18000
-  // EDT: 14400 - 18000 = -3600  (restar 1h en verano)
-  // EST: 18000 - 18000 = 0      (sin cambio en invierno)
-  return (-etOffsetSec) - 18000;
-}
-
 export async function fetchNT8Bars(symbol: string, count = 1000, tf: Timeframe = "1m", offset = 0): Promise<Candle[]> {
-  const res = await fetch(`${NT8_BASE}/bars?symbol=${encodeURIComponent(symbol)}&count=${count}&tf=${tf}&offset=${offset}`);
+  const nt8Symbol = symbol.split(/[=-]/)[0];
+  const timestamp = Date.now();
+  const res = await fetch(
+    `${NT8_BASE}/bars?symbol=${encodeURIComponent(nt8Symbol)}&count=${count}&tf=${tf}&offset=${offset}&_t=${timestamp}`,
+    { cache: "no-store" }
+  );
   if (!res.ok) throw new Error("NT8 no responde");
   // Fix: some Windows locales send numbers with ',' as decimal separator
   const text = (await res.text()).replace(/:\s*(-?\d+),(\d+)/g, ":$1.$2");
-  const data: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> =
-    JSON.parse(text);
-  const corr = nt8TimestampCorrection();
-  return data
-    .filter((b) => b.close > 0 && b.open > 0 && b.high > 0 && b.low > 0)
-    .map((b) => ({ ...b, time: b.time + corr }))
-    .sort((a, b) => a.time - b.time);
+  const data: Array<any> = JSON.parse(text);
+  if (typeof window !== "undefined") {
+    setTimeout(() => {
+       fetch('/api/log', { method: 'POST', body: JSON.stringify({ source: 'nt8_rest_final', tf, data: Array.from(bucketed.values()).slice(-20) }) }).catch(console.error);
+    }, 1000);
+  }
+  
+  const nt8OffsetHours = useChartStore.getState().nt8OffsetHours;
+  const offsetSecs = nt8OffsetHours * 3600;
+
+  const rawBars = data.filter((b: any) => {
+    const o = b.open ?? b.Open ?? b.o ?? b.O ?? 0;
+    const h = b.high ?? b.High ?? b.h ?? b.H ?? 0;
+    const l = b.low ?? b.Low ?? b.l ?? b.L ?? 0;
+    const c = b.close ?? b.Close ?? b.c ?? b.C ?? 0;
+    if (o <= 0 || h <= 0 || l <= 0 || c <= 0) return false;
+    // Evitar que velas corruptas de NT8 ("que van a cero") dañen la escala del gráfico
+    if (l < c * 0.5 || h > c * 1.5) return false;
+    return true;
+  });
+
+  if (rawBars.length < 5) {
+    throw new Error("NinjaTrader aún está conectando al broker o sin datos históricos. Espere unos segundos.");
+  }
+
+  const bucketed = new Map<number, any>();
+
+  const TF_SECS: Record<string, number> = {
+    "1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400,
+  };
+  const bucketSecs = TF_SECS[tf] || 60;
+
+  for (const b of rawBars) {
+    const rawTime = b.time ?? b.Time ?? b.t ?? b.T ?? 0;
+    const isMs = rawTime > 100000000000;
+    const tSecs = isMs ? rawTime / 1000 : rawTime;
+    const time = Math.floor(tSecs / bucketSecs) * bucketSecs + offsetSecs;
+
+    if (isNaN(time)) continue;
+
+    const open = b.open ?? b.Open ?? b.o ?? b.O ?? 0;
+    const high = b.high ?? b.High ?? b.h ?? b.H ?? 0;
+    const low = b.low ?? b.Low ?? b.l ?? b.L ?? 0;
+    const close = b.close ?? b.Close ?? b.c ?? b.C ?? 0;
+    const volume = b.volume ?? b.Volume ?? b.v ?? b.V ?? 0;
+
+    if (!bucketed.has(time)) {
+      bucketed.set(time, { time, open, high, low, close, volume });
+    } else {
+      const existing = bucketed.get(time);
+      existing.high = Math.max(existing.high, high);
+      existing.low = Math.min(existing.low, low);
+      existing.close = close;
+      existing.volume += volume;
+    }
+  }
+
+  const result = Array.from(bucketed.values()).sort((a, b) => a.time - b.time);
+  return result;
 }
 
 export async function fetchNT8Info(): Promise<{ instrument: string; timeframe: string; bars: number }> {

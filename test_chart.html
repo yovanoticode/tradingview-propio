@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src='https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js'></script>
+</head>
+<body>
+  <div id='chart' style='width: 800px; height: 600px;'></div>
+  <script>
+    const chart = LightweightCharts.createChart(document.getElementById('chart'));
+    const s = chart.addCandlestickSeries();
+    s.setData([{"time":1781011200,"open":29694,"high":29701,"low":29693.25,"close":29697.75,"volume":1138},{"time":1781011260,"open":29698,"high":29720.5,"low":29698,"close":29712,"volume":2695},{"time":1781011320,"open":29711,"high":29714.75,"low":29708,"close":29712,"volume":1145},{"time":1781011380,"open":29711.75,"high":29718.5,"low":29709.75,"close":29716.5,"volume":726},{"time":1781011440,"open":29716.75,"high":29718,"low":29708,"close":29712.75,"volume":1109},{"time":1781011500,"open":29712.5,"high":29716.5,"low":29708.5,"close":29712.5,"volume":875},{"time":1781011560,"open":29713,"high":29722.25,"low":29704,"close":29708,"volume":4291},{"time":1781011620,"open":29707.5,"high":29712.25,"low":29699,"close":29707,"volume":2581},{"time":1781011680,"open":29707,"high":29724.75,"low":29705,"close":29720.5,"volume":2341},{"time":1781011740,"open":29720.5,"high":29728,"low":29716.25,"close":29720.5,"volume":2016},{"time":1781011800,"open":29720.5,"high":29740.25,"low":29720,"close":29737.75,"volume":3721},{"time":1781011860,"open":29737.25,"high":29744,"low":29694.25,"close":29727.5,"volume":13356},{"time":1781011920,"open":29727.5,"high":29736.25,"low":29681.75,"close":29687.5,"volume":12698},{"time":1781011980,"open":29687.75,"high":29700.25,"low":29661,"close":29685,"volume":16552},{"time":1781012040,"open":29686,"high":29691.5,"low":29654,"close":29655,"volume":11270},{"time":1781012100,"open":29654.25,"high":29660.75,"low":29633.25,"close":29650.25,"volume":12498},{"time":1781012160,"open":29650.25,"high":29709.75,"low":29647.25,"close":29709,"volume":16003},{"time":1781012220,"open":29708.5,"high":29724,"low":29694.5,"close":29717.75,"volume":12737},{"time":1781012280,"open":29717.5,"high":29730.75,"low":29712.25,"close":29718.75,"volume":8839},{"time":1781012340,"open":29719.5,"high":29727.25,"low":29705,"close":29709.75,"volume":4805}]);
+  </script>
+</body>
+</html>

@@ -158,14 +158,22 @@ class TradovateWebSocketClient {
     if (!sub) return;
 
     if (chart.bars && Array.isArray(chart.bars)) {
-      const newCandles: Candle[] = chart.bars.map((bar: any) => ({
-        time: Math.round(Date.parse(bar.t) / 1000),
-        open: bar.o,
-        high: bar.h,
-        low: bar.l,
-        close: bar.c,
-        volume: bar.v,
-      }));
+      if (!(window as any).loggedBars) {
+        (window as any).loggedBars = true;
+        fetch('/api/log', { method: 'POST', body: JSON.stringify(chart.bars.slice(0,2)) }).catch(console.error);
+      }
+      const newCandles: Candle[] = chart.bars
+        .map((bar: any) => {
+          const timeStr = bar.timestamp || bar.t;
+          const time = typeof timeStr === "string" ? Math.round(Date.parse(timeStr) / 1000) : timeStr;
+          const open = bar.open ?? bar.o ?? 0;
+          const high = bar.high ?? bar.h ?? 0;
+          const low = bar.low ?? bar.l ?? 0;
+          const close = bar.close ?? bar.c ?? 0;
+          const volume = (bar.upVolume ?? 0) + (bar.downVolume ?? 0) || bar.volume || bar.v || 0;
+          return { time, open, high, low, close, volume };
+        })
+        .filter((c: Candle) => !isNaN(c.time) && c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0);
 
       // Collect and merge bars by timestamp to prevent duplicates
       const merged = [...sub.bars];

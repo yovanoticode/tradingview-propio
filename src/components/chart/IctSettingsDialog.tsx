@@ -7,6 +7,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   useChartStore,
@@ -16,6 +28,43 @@ import {
   type OpeningPriceRow,
   type TimestampRow,
 } from "@/lib/store/chart-store";
+
+const PRESET_COLORS = [
+  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#a855f7",
+  "#ec4899", "#14b8a6", "#6366f1", "#ffffff", "#787b86",
+  "#000000", "#d1d5db", "#facc15", "#38bdf8", "#a78bfa"
+];
+
+function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <div 
+          className="h-6 w-6 cursor-pointer rounded border border-tv-border flex-shrink-0" 
+          style={{ backgroundColor: value }}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-48 bg-tv-bg border-tv-border p-2">
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {PRESET_COLORS.map((c) => (
+            <div
+              key={c}
+              className={`h-5 w-5 rounded cursor-pointer border border-tv-border/50 hover:scale-110 transition-transform ${value.toLowerCase() === c ? "ring-2 ring-white ring-offset-1 ring-offset-tv-bg" : ""}`}
+              style={{ backgroundColor: c }}
+              onClick={() => onChange(c)}
+            />
+          ))}
+        </div>
+        <input 
+          type="text" 
+          value={value} 
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-[#1e222d] border border-tv-border text-tv-text text-xs rounded px-2 py-1 uppercase font-mono"
+        />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -105,11 +154,9 @@ function SessionRow({
         }}
         className="w-[72px] rounded border border-tv-border bg-tv-bg px-1 py-0.5 text-xs text-tv-text"
       />
-      <input
-        type="color"
-        value={sess.color}
-        onChange={(e) => onChange({ ...sess, color: e.target.value })}
-        className="h-6 w-6 cursor-pointer rounded border border-tv-border bg-transparent p-0"
+      <ColorPicker 
+        value={sess.color} 
+        onChange={(c) => onChange({ ...sess, color: c })} 
       />
     </div>
   );
@@ -127,7 +174,7 @@ function OpeningRow({
       <input type="checkbox" checked={row.enabled} onChange={(e) => onChange({ ...row, enabled: e.target.checked })} className="h-3.5 w-3.5 shrink-0 accent-tv-blue" />
       <input value={row.name} onChange={(e) => onChange({ ...row, name: e.target.value })} placeholder="Nombre" className="w-20 rounded border border-tv-border bg-tv-bg px-1.5 py-0.5 text-xs text-tv-text" maxLength={14} />
       <input type="time" value={toTime(row.timeH, row.timeM)} onChange={(e) => { const { h, m } = fromTime(e.target.value); onChange({ ...row, timeH: h, timeM: m }); }} className="w-[72px] rounded border border-tv-border bg-tv-bg px-1 py-0.5 text-xs text-tv-text" />
-      <input type="color" value={row.color} onChange={(e) => onChange({ ...row, color: e.target.value })} className="h-6 w-6 cursor-pointer rounded border border-tv-border bg-transparent p-0" />
+      <ColorPicker value={row.color} onChange={(c) => onChange({ ...row, color: c })} />
     </div>
   );
 }
@@ -143,7 +190,7 @@ function TimestampRowComp({
     <div className="flex items-center gap-1.5 py-0.5">
       <input type="checkbox" checked={row.enabled} onChange={(e) => onChange({ ...row, enabled: e.target.checked })} className="h-3.5 w-3.5 shrink-0 accent-tv-blue" />
       <input type="time" value={toTime(row.timeH, row.timeM)} onChange={(e) => { const { h, m } = fromTime(e.target.value); onChange({ ...row, timeH: h, timeM: m }); }} className="w-[72px] rounded border border-tv-border bg-tv-bg px-1 py-0.5 text-xs text-tv-text" />
-      <input type="color" value={row.color} onChange={(e) => onChange({ ...row, color: e.target.value })} className="h-6 w-6 cursor-pointer rounded border border-tv-border bg-transparent p-0" />
+      <ColorPicker value={row.color} onChange={(c) => onChange({ ...row, color: c })} />
     </div>
   );
 }
@@ -247,35 +294,62 @@ export function IctSettingsDialog({ open, onClose }: Props) {
           {/* ── CONFIGURACIÓN ─────────────────────────────── */}
           <SectionLabel>Configuración</SectionLabel>
 
-          <Row label="Session Drawing Limit">
+          <Row label="Mostrar Perfil Diario AMD (PO3)">
             <input
-              type="number"
-              min={1}
-              max={20}
-              value={d.sessionDrawingLimit}
-              onChange={(e) => setD((p) => ({ ...p, sessionDrawingLimit: Math.max(1, Number(e.target.value)) }))}
-              className="w-16 rounded border border-tv-border bg-tv-bg px-2 py-0.5 text-xs text-tv-text"
+              type="checkbox"
+              checked={d.showAMD}
+              onChange={(e) => setD((p) => ({ ...p, showAMD: e.target.checked }))}
+              className="h-3 w-3 accent-tv-blue"
             />
           </Row>
 
+          <Row label="Timeframe Limit">
+            <div className="flex items-center gap-2">
+              <Select
+                value={String(d.timeframeLimit)}
+                onValueChange={(val) => setD((p) => ({ ...p, timeframeLimit: Number(val) }))}
+              >
+                <SelectTrigger className="w-28 h-7 text-xs bg-tv-bg border-tv-border text-tv-text">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1e222d] border-[#2a2e39] text-[#d1d4dc]">
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="45">45 minutos</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="60">1 hora</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="120">2 horas</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="180">3 horas</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="240">4 horas</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="720">12 horas</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="1440">1 día</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="4320">3 días</SelectItem>
+                  <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="10080">1 semana</SelectItem>
+                </SelectContent>
+              </Select>
+              <div title="Ocultar los killzones si el gráfico está en una temporalidad mayor a la seleccionada." className="cursor-help rounded-full border border-tv-border bg-tv-bg px-1.5 text-[10px] text-tv-text-muted hover:text-tv-text">
+                i
+              </div>
+            </div>
+          </Row>
+
           <Row label="Label Size">
-            <select
+            <Select
               value={d.labelSize}
-              onChange={(e) => setD((p) => ({ ...p, labelSize: e.target.value as "small" | "medium" | "large" }))}
-              className="rounded border border-tv-border bg-tv-bg px-2 py-0.5 text-xs text-tv-text"
+              onValueChange={(val) => setD((p) => ({ ...p, labelSize: val as "small" | "medium" | "large" }))}
             >
-              <option value="small">Pequeño</option>
-              <option value="medium">Mediano</option>
-              <option value="large">Grande</option>
-            </select>
+              <SelectTrigger className="w-24 h-7 text-xs bg-tv-bg border-tv-border text-tv-text">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-[#1e222d] border-[#2a2e39] text-[#d1d4dc]">
+                <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="small">Pequeño</SelectItem>
+                <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="medium">Mediano</SelectItem>
+                <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="large">Grande</SelectItem>
+              </SelectContent>
+            </Select>
           </Row>
 
           <Row label="Text Color">
-            <input
-              type="color"
+            <ColorPicker
               value={d.textColor}
-              onChange={(e) => setD((p) => ({ ...p, textColor: e.target.value }))}
-              className="h-6 w-8 cursor-pointer rounded border border-tv-border bg-transparent p-0"
+              onChange={(c) => setD((p) => ({ ...p, textColor: c }))}
             />
           </Row>
 
@@ -341,15 +415,19 @@ export function IctSettingsDialog({ open, onClose }: Props) {
           </div>
 
           <Row label="Extend Pivots…">
-            <select
+            <Select
               value={d.pivotExtend}
-              onChange={(e) => setD((p) => ({ ...p, pivotExtend: e.target.value as "mitigated" | "always" | "none" }))}
-              className="rounded border border-tv-border bg-tv-bg px-2 py-0.5 text-xs text-tv-text"
+              onValueChange={(val) => setD((p) => ({ ...p, pivotExtend: val as "mitigated" | "always" | "none" }))}
             >
-              <option value="mitigated">Until Mitigated</option>
-              <option value="always">Always</option>
-              <option value="none">Don&apos;t Extend</option>
-            </select>
+              <SelectTrigger className="w-32 h-7 text-xs bg-tv-bg border-tv-border text-tv-text">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-[#1e222d] border-[#2a2e39] text-[#d1d4dc]">
+                <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="mitigated">Until Mitigated</SelectItem>
+                <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="always">Always</SelectItem>
+                <SelectItem className="text-xs focus:bg-[#2a2e39] focus:text-white" value="none">Don&apos;t Extend</SelectItem>
+              </SelectContent>
+            </Select>
           </Row>
 
           <div className="mt-2 divide-y divide-tv-border/40">
@@ -367,6 +445,13 @@ export function IctSettingsDialog({ open, onClose }: Props) {
 
           {/* ── OPENING PRICES ────────────────────────────── */}
           <SectionLabel>Opening Prices</SectionLabel>
+          <div className="mb-2">
+            <Check
+              checked={d.openingPricesOnlyToday ?? true}
+              onChange={(v) => setD((p) => ({ ...p, openingPricesOnlyToday: v }))}
+              label="Mostrar solo el día actual"
+            />
+          </div>
           <div className="divide-y divide-tv-border/40">
             {d.openingPrices.map((row, i) => (
               <OpeningRow key={i} row={row} onChange={(r) => updateOpeningRow(i, r)} />
@@ -386,11 +471,11 @@ export function IctSettingsDialog({ open, onClose }: Props) {
           <div className="flex flex-col gap-1">
             {(
               [
-                { label: "D Open", openKey: "showDOpen", hlKey: "showDHL", colorKey: "dColor" },
-                { label: "W Open", openKey: "showWOpen", hlKey: "showWHL", colorKey: "wColor" },
-                { label: "M Open", openKey: "showMOpen", hlKey: "showMHL", colorKey: "mColor" },
+                { label: "D Open", openKey: "showDOpen", hlKey: "showDHL", phlKey: "showPDHL", colorKey: "dColor" },
+                { label: "W Open", openKey: "showWOpen", hlKey: "showWHL", phlKey: "showPWHL", colorKey: "wColor" },
+                { label: "M Open", openKey: "showMOpen", hlKey: "showMHL", phlKey: "showPMHL", colorKey: "mColor" },
               ] as const
-            ).map(({ label, openKey, hlKey, colorKey }) => (
+            ).map(({ label, openKey, hlKey, phlKey, colorKey }) => (
               <div key={label} className="flex items-center gap-3 py-0.5">
                 <Check
                   checked={d.dwm[openKey]}
@@ -398,16 +483,21 @@ export function IctSettingsDialog({ open, onClose }: Props) {
                   label={label}
                 />
                 <Check
+                  checked={d.dwm[phlKey]}
+                  onChange={(v) => setD((p) => ({ ...p, dwm: { ...p.dwm, [phlKey]: v } }))}
+                  label="Prev H/L"
+                />
+                <Check
                   checked={d.dwm[hlKey]}
                   onChange={(v) => setD((p) => ({ ...p, dwm: { ...p.dwm, [hlKey]: v } }))}
-                  label="High/Low"
+                  label="Curr H/L"
                 />
-                <input
-                  type="color"
-                  value={d.dwm[colorKey]}
-                  onChange={(e) => setD((p) => ({ ...p, dwm: { ...p.dwm, [colorKey]: e.target.value } }))}
-                  className="ml-auto h-6 w-6 cursor-pointer rounded border border-tv-border bg-transparent p-0"
-                />
+                <div className="ml-auto">
+                  <ColorPicker
+                    value={d.dwm[colorKey] as string}
+                    onChange={(c) => setD((p) => ({ ...p, dwm: { ...p.dwm, [colorKey]: c } }))}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -420,7 +510,12 @@ export function IctSettingsDialog({ open, onClose }: Props) {
             <Check
               checked={d.dwm.hideWeekendLabels}
               onChange={(v) => setD((p) => ({ ...p, dwm: { ...p.dwm, hideWeekendLabels: v } }))}
-              label="Hide Weekend Labels"
+              label="Hide Weekends"
+            />
+            <Check
+              checked={d.dwm.cmeShift}
+              onChange={(v) => setD((p) => ({ ...p, dwm: { ...p.dwm, cmeShift: v } }))}
+              label="CME Shift (18:00 ET)"
             />
           </div>
 

@@ -10,19 +10,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useChartStore, type IndicatorKey } from "@/lib/store/chart-store";
+import { useChartStore, type IndicatorKey, type IndicatorConfig } from "@/lib/store/chart-store";
 
 interface Entry {
   key: IndicatorKey;
-  label: (cfg: {
-    ema20: number;
-    ema50: number;
-    ema200: number;
-    rsi: number;
-    macdFast: number;
-    macdSlow: number;
-    macdSignal: number;
-  }) => string;
+  label: (cfg: IndicatorConfig) => string;
   group: string;
 }
 
@@ -39,8 +31,14 @@ const ENTRIES: Entry[] = [
     group: "Osciladores",
     label: (c) => `MACD (${c.macdFast}, ${c.macdSlow}, ${c.macdSignal})`,
   },
+  {
+    key: "stoch",
+    group: "Osciladores",
+    label: (c) => `Estocástico (${c.stochK}, ${c.stochD})`,
+  },
   { key: "orb", group: "Sesión", label: () => "ORB (09:30–09:45 ET)" },
   { key: "ict", group: "Sesión", label: () => "ICT Killzones" },
+  { key: "ictMacros", group: "ICT / SMC", label: () => "ICT Macros" },
   { key: "fvg", group: "ICT / SMC", label: () => "Fair Value Gaps (FVG)" },
 ];
 

@@ -16,26 +16,35 @@ import {
 import { fetchNT8Bars } from "@/lib/nt8/rest";
 import { fetchBinanceKlines, getBinanceKlineWS } from "@/lib/binance/klines";
 import { isCryptoSymbol } from "@/lib/binance/ticker";
-import { getNT8WS } from "@/lib/nt8/ws";
+import { getNT8WS, nt8TimestampCorrection } from "@/lib/nt8/ws";
 import { fetchKlines } from "@/lib/yahoo/rest";
 import { getYahooPoller } from "@/lib/yahoo/ws";
 import { getTradovateWS } from "@/lib/tradovate/ws";
-import { ema, rsi, macd } from "@/lib/indicators";
+import { ema, rsi, macd, stochastic } from "@/lib/indicators";
 import { calculateORB, type ORBResult } from "@/lib/indicators/orb";
 import { calculateVWAP } from "@/lib/indicators/vwap";
+import { Minus, Plus, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { calculateVolumeProfile, type VolumeProfile } from "@/lib/indicators/volumeProfile";
 import { VolumeProfileOverlay } from "./VolumeProfileOverlay";
 import { calculateKillzones, type KZBox } from "@/lib/indicators/killzones";
+import { calculateMacros, type MacroBox } from "@/lib/indicators/ict-macros";
 import { calculateFVGs, type FVGBox } from "@/lib/indicators/fvg";
 import { calculateOrderBlocks, type OBBox } from "@/lib/indicators/orderBlocks";
 import { calculateMarketStructure, type StructureBreak, type SwingPoint } from "@/lib/indicators/marketStructure";
+import { calculateOTE, type OTELevels } from "@/lib/indicators/ote";
+import { OTEOverlay } from "./OTEOverlay";
 import { FVGOverlay } from "./FVGOverlay";
 import { OrderBlockOverlay } from "./OrderBlockOverlay";
 import { MarketStructureOverlay } from "./MarketStructureOverlay";
 import { FvgSettingsDialog } from "./FvgSettingsDialog";
 import { KillzonesOverlay } from "./KillzonesOverlay";
+import { IctMacrosOverlay } from "./ICTMacrosOverlay";
+import { AMDOverlay } from "./AMDOverlay";
 import { LevelsOverlay } from "./LevelsOverlay";
+import { calculateAMD, type AMDDay } from "@/lib/indicators/amd";
+import { calculateDailyBias, type DailyBias } from "@/lib/indicators/bias";
 import { IctSettingsDialog } from "./IctSettingsDialog";
+import { MacrosSettingsDialog } from "./MacrosSettingsDialog";
 import {
   calculateOpeningPrices,
   calculateDWM,
@@ -114,6 +123,8 @@ interface LastValues {
   macd?: number;
   macdSignal?: number;
   macdHist?: number;
+  stochK?: number;
+  stochD?: number;
   volume?: number;
 }
 
@@ -137,11 +148,19 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   const macdRef = useRef<ISeriesApi<"Line"> | null>(null);
   const macdSignalRef = useRef<ISeriesApi<"Line"> | null>(null);
   const macdHistRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const stochKRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const stochDRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const stoch20Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const stoch80Ref = useRef<ISeriesApi<"Line"> | null>(null);
+
   const candlesRef = useRef<Candle[]>([]);
   const priceLinesMapRef = useRef<Map<string, IPriceLine>>(new Map());
   const alertLinesMapRef = useRef<Map<string, IPriceLine>>(new Map());
 
   const ictConfig = useChartStore((s) => s.ictConfig);
+  const macrosConfig = useChartStore((s) => s.macrosConfig);
+  const macrosConfigRef = useRef(macrosConfig);
+  macrosConfigRef.current = macrosConfig;
   const fvgConfig = useChartStore((s) => s.fvgConfig);
   const fvgConfigRef = useRef(fvgConfig);
   fvgConfigRef.current = fvgConfig;
@@ -220,16 +239,21 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   const [lastValues, setLastValues] = useState<LastValues>({});
   const [orbResult, setOrbResult] = useState<ORBResult | null>(null);
   const [kzBoxes, setKzBoxes] = useState<KZBox[]>([]);
+  const [amdDays, setAmdDays] = useState<AMDDay[]>([]);
+  const [dailyBias, setDailyBias] = useState<DailyBias>("Neutral");
+  const [macroBoxes, setMacroBoxes] = useState<MacroBox[]>([]);
   const [fvgBoxes, setFvgBoxes] = useState<FVGBox[]>([]);
   const [obBoxes,  setObBoxes]  = useState<OBBox[]>([]);
   const [msbBreaks, setMsbBreaks] = useState<StructureBreak[]>([]);
   const [msbSwings, setMsbSwings] = useState<SwingPoint[]>([]);
+  const [oteData, setOteData] = useState<OTELevels | null>(null);
   const [fvgSettingsOpen, setFvgSettingsOpen] = useState(false);
   const [opLevels, setOpLevels] = useState<HorizLevel[]>([]);
   const [dwmLevels, setDwmLevels] = useState<HorizLevel[]>([]);
   const [tsList, setTsList] = useState<VertLine[]>([]);
   const [vProfile, setVProfile] = useState<VolumeProfile | null>(null);
   const [ictSettingsOpen, setIctSettingsOpen] = useState(false);
+  const [macrosSettingsOpen, setMacrosSettingsOpen] = useState(false);
   const [paneOffsets, setPaneOffsets] = useState<PaneOffset[]>([]);
   // Pagination tracking — count of historical bars loaded so server knows offset
   const loadedOffsetRef = useRef<number>(0);
@@ -563,7 +587,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       }));
       v.setData(data);
     } else if (!indicators.volume && volumeSeriesRef.current && chartRef.current) {
-      chartRef.current.removeSeries(volumeSeriesRef.current);
+      try { chartRef.current.removeSeries(volumeSeriesRef.current); } catch {}
       volumeSeriesRef.current = null;
     }
     requestAnimationFrame(() => recomputePaneOffsets());
@@ -615,9 +639,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       } catch {}
       updateRSI();
     } else if (!indicators.rsi && rsiRef.current && chartRef.current) {
-      chartRef.current.removeSeries(rsiRef.current);
-      if (rsi30Ref.current) chartRef.current.removeSeries(rsi30Ref.current);
-      if (rsi70Ref.current) chartRef.current.removeSeries(rsi70Ref.current);
+      try { chartRef.current.removeSeries(rsiRef.current); } catch {}
+      try { if (rsi30Ref.current) chartRef.current.removeSeries(rsi30Ref.current); } catch {}
+      try { if (rsi70Ref.current) chartRef.current.removeSeries(rsi70Ref.current); } catch {}
       rsiRef.current = null;
       rsi30Ref.current = null;
       rsi70Ref.current = null;
@@ -665,9 +689,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       } catch {}
       updateMACD();
     } else if (!indicators.macd && macdRef.current && chartRef.current) {
-      if (macdRef.current) chartRef.current.removeSeries(macdRef.current);
-      if (macdSignalRef.current) chartRef.current.removeSeries(macdSignalRef.current);
-      if (macdHistRef.current) chartRef.current.removeSeries(macdHistRef.current);
+      try { if (macdRef.current) chartRef.current.removeSeries(macdRef.current); } catch {}
+      try { if (macdSignalRef.current) chartRef.current.removeSeries(macdSignalRef.current); } catch {}
+      try { if (macdHistRef.current) chartRef.current.removeSeries(macdHistRef.current); } catch {}
       macdRef.current = null;
       macdSignalRef.current = null;
       macdHistRef.current = null;
@@ -675,6 +699,60 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     requestAnimationFrame(() => recomputePaneOffsets());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indicators.macd, indicators.rsi]);
+
+  // Stoch pane
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const v = (k: IndicatorKey) => !hidden[k];
+
+    if (indicators.stoch && !stochKRef.current) {
+      const paneIndex = (indicators.rsi ? 1 : 0) + (indicators.macd ? 1 : 0) + 1;
+      const kColor = config.stochKColor || INDICATOR_COLORS.stoch || "#2196f3";
+      
+      const kSeries = chartRef.current.addSeries(
+        LineSeries,
+        { color: kColor, lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
+        paneIndex,
+      );
+      const dSeries = chartRef.current.addSeries(
+        LineSeries,
+        { color: config.stochDColor || "#ffa726", lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
+        paneIndex,
+      );
+      const s20 = chartRef.current.addSeries(
+        LineSeries,
+        { color: `${TV_COLORS.textMuted}40`, lineWidth: 1, lineStyle: 2, crosshairMarkerVisible: false, lastValueVisible: false, priceLineVisible: false },
+        paneIndex,
+      );
+      const s80 = chartRef.current.addSeries(
+        LineSeries,
+        { color: `${TV_COLORS.textMuted}40`, lineWidth: 1, lineStyle: 2, crosshairMarkerVisible: false, lastValueVisible: false, priceLineVisible: false },
+        paneIndex,
+      );
+
+      stochKRef.current = kSeries;
+      stochDRef.current = dSeries;
+      stoch20Ref.current = s20;
+      stoch80Ref.current = s80;
+
+      stochKRef.current.applyOptions({ visible: v("stoch") && config.stochKVisible });
+      stochDRef.current.applyOptions({ visible: v("stoch") && config.stochDVisible });
+      stoch20Ref.current.applyOptions({ visible: v("stoch") });
+      stoch80Ref.current.applyOptions({ visible: v("stoch") });
+
+      updateStoch();
+    } else if (!indicators.stoch && stochKRef.current && chartRef.current) {
+      try { chartRef.current.removeSeries(stochKRef.current); } catch {}
+      try { if (stochDRef.current) chartRef.current.removeSeries(stochDRef.current); } catch {}
+      try { if (stoch20Ref.current) chartRef.current.removeSeries(stoch20Ref.current); } catch {}
+      try { if (stoch80Ref.current) chartRef.current.removeSeries(stoch80Ref.current); } catch {}
+      stochKRef.current = null;
+      stochDRef.current = null;
+      stoch20Ref.current = null;
+      stoch80Ref.current = null;
+    }
+    requestAnimationFrame(() => recomputePaneOffsets());
+  }, [indicators.stoch, indicators.rsi, indicators.macd]);
 
   // Visibility — eye toggle (hidden state) + enabled state combined
   useEffect(() => {
@@ -689,8 +767,12 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     if (macdRef.current) macdRef.current.applyOptions({ visible: v("macd") });
     if (macdSignalRef.current) macdSignalRef.current.applyOptions({ visible: v("macd") });
     if (macdHistRef.current) macdHistRef.current.applyOptions({ visible: v("macd") });
+    if (stochKRef.current) stochKRef.current.applyOptions({ visible: v("stoch") && config.stochKVisible });
+    if (stochDRef.current) stochDRef.current.applyOptions({ visible: v("stoch") && config.stochDVisible });
+    if (stoch20Ref.current) stoch20Ref.current.applyOptions({ visible: v("stoch") });
+    if (stoch80Ref.current) stoch80Ref.current.applyOptions({ visible: v("stoch") });
     if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: v("volume") });
-  }, [indicators, hidden]);
+  }, [indicators, hidden, config.stochKVisible, config.stochDVisible]);
 
   // Recompute indicators when config changes (periods)
   useEffect(() => {
@@ -704,6 +786,12 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   useEffect(() => {
     updateMACD();
   }, [config.macdFast, config.macdSlow, config.macdSignal]);
+
+  useEffect(() => {
+    updateStoch();
+    if (stochKRef.current) stochKRef.current.applyOptions({ color: config.stochKColor || "#2196f3" });
+    if (stochDRef.current) stochDRef.current.applyOptions({ color: config.stochDColor || "#ffa726" });
+  }, [config.stochK, config.stochD, config.stochKColor, config.stochDColor]);
 
   // Sync price lines from store to the candle series
   useEffect(() => {
@@ -774,12 +862,21 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   // Recompute all ICT levels when config changes
   useEffect(() => {
     const c = candlesRef.current;
-    if (c.length === 0) return;
+    if (c.length === 0 || !indicators.ict) return;
     setKzBoxes(calculateKillzones(c, ictConfig));
+    setAmdDays(calculateAMD(c, ictConfig.showAMD));
+    setDailyBias(calculateDailyBias(c));
     setOpLevels(calculateOpeningPrices(c, ictConfig));
     setDwmLevels(calculateDWM(c, ictConfig));
     setTsList(calculateTimestamps(c, ictConfig));
   }, [ictConfig]);
+
+  // Recompute all ICT macros when config changes
+  useEffect(() => {
+    const c = candlesRef.current;
+    if (c.length === 0) return;
+    setMacroBoxes(calculateMacros(c, macrosConfig));
+  }, [macrosConfig]);
 
   // Recompute FVGs + MSB + OBs when fvgConfig changes
   useEffect(() => {
@@ -789,6 +886,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     const { breaks, swings } = calculateMarketStructure(c, fvgConfig.msbLookback);
     setMsbBreaks(fvgConfig.showMSB ? breaks : []);
     setMsbSwings(fvgConfig.showMSB ? swings : []);
+    setOteData(fvgConfig.showOTE ? calculateOTE(swings) : null);
     if (fvgConfig.showOB) {
       const obs = calculateOrderBlocks(c, breaks, fvgConfig.maxOBCount);
       setObBoxes(fvgConfig.showBreaker ? obs : obs.filter((ob) => !ob.isBreaker));
@@ -811,7 +909,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
         color: k.close >= k.open ? `${TV_COLORS.green}66` : `${TV_COLORS.red}66`,
       })));
     }
-    updateEMAs(); updateRSI(); updateMACD();
+    updateEMAs(); updateRSI(); updateMACD(); updateStoch();
   }, [replayActive]);
 
   // Replay mode — when active, freeze chart at replayIndex; play advances index
@@ -841,7 +939,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     candlesRef.current = sliced;
     updateEMAs();
     updateRSI();
-    updateMACD();
+    updateMACD(); updateStoch();
     candlesRef.current = original;
   }, [replayActive, replayIndex, setReplay]);
 
@@ -1007,6 +1105,38 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     }));
   }
 
+  function updateStoch() {
+    const c = candlesRef.current;
+    if (c.length === 0 || !stochKRef.current) return;
+    const cfg = configRef.current;
+    const s = stochastic(c, cfg.stochK, cfg.stochD);
+    
+    if (s.length > 0) {
+      stochKRef.current.setData(s.map((p) => ({ time: p.time as UTCTimestamp, value: p.k })));
+      stochDRef.current?.setData(s.map((p) => ({ time: p.time as UTCTimestamp, value: p.d })));
+      
+      if (stoch20Ref.current) {
+        stoch20Ref.current.setData([
+          { time: s[0].time as UTCTimestamp, value: 20 },
+          { time: s[s.length - 1].time as UTCTimestamp, value: 20 },
+        ]);
+      }
+      if (stoch80Ref.current) {
+        stoch80Ref.current.setData([
+          { time: s[0].time as UTCTimestamp, value: 80 },
+          { time: s[s.length - 1].time as UTCTimestamp, value: 80 },
+        ]);
+      }
+    }
+      
+    const last = s.at(-1);
+    setLastValues((prev) => ({
+      ...prev,
+      stochK: last?.k,
+      stochD: last?.d,
+    }));
+  }
+
   // Load historical data + subscribe live
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -1043,7 +1173,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             }
             updateEMAs();
             updateRSI();
-            updateMACD();
+            updateMACD(); updateStoch();
             
             if (bars.length > 0) {
               const last = bars[bars.length - 1];
@@ -1079,15 +1209,17 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
 
               if (bars.length > 0) {
                 setOrbResult(calculateORB(bars));
-                const cfg = ictConfigRef.current;
-                setKzBoxes(calculateKillzones(bars, cfg));
-                setOpLevels(calculateOpeningPrices(bars, cfg));
-                setDwmLevels(calculateDWM(bars, cfg));
-                setTsList(calculateTimestamps(bars, cfg));
+                setKzBoxes(calculateKillzones(bars, ictConfigRef.current));
+                setAmdDays(calculateAMD(bars, ictConfigRef.current.showAMD));
+                setDailyBias(calculateDailyBias(bars));
+                setOpLevels(calculateOpeningPrices(bars, ictConfigRef.current));
+                setDwmLevels(calculateDWM(bars, ictConfigRef.current));
+                setTsList(calculateTimestamps(bars, ictConfigRef.current));
                 setFvgBoxes(calculateFVGs(bars, timeframe, fvgConfigRef.current));
                 const { breaks: msbBrks, swings: msbSws } = calculateMarketStructure(bars, fvgConfigRef.current.msbLookback);
                 setMsbBreaks(fvgConfigRef.current.showMSB ? msbBrks : []);
                 setMsbSwings(fvgConfigRef.current.showMSB ? msbSws  : []);
+                setOteData(fvgConfigRef.current.showOTE ? calculateOTE(msbSws) : null);
                 if (fvgConfigRef.current.showOB) {
                   const obs = calculateOrderBlocks(bars, msbBrks, fvgConfigRef.current.maxOBCount);
                   setObBoxes(fvgConfigRef.current.showBreaker ? obs : obs.filter((ob) => !ob.isBreaker));
@@ -1109,7 +1241,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
         const klines = isCrypto
           ? await fetchBinanceKlines(symbol, timeframe, 500)
           : useNT8
-          ? await fetchNT8Bars(symbol, 500, timeframe)
+          ? await fetchNT8Bars(symbol, 5000, timeframe)
           : await fetchKlines(symbol, timeframe, 500);
         loadedOffsetRef.current = klines.length;
         if (cancelled) return;
@@ -1136,7 +1268,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
         }
         updateEMAs();
         updateRSI();
-        updateMACD();
+        updateMACD(); updateStoch();
         chartRef.current?.timeScale().applyOptions({ barSpacing: 8 });
         chartRef.current?.timeScale().scrollToPosition(0, false);
         requestAnimationFrame(() => recomputePaneOffsets());
@@ -1151,15 +1283,17 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
         }
 
         setOrbResult(calculateORB(klines));
-        const cfg = ictConfigRef.current;
-        setKzBoxes(calculateKillzones(klines, cfg));
-        setOpLevels(calculateOpeningPrices(klines, cfg));
-        setDwmLevels(calculateDWM(klines, cfg));
-        setTsList(calculateTimestamps(klines, cfg));
+        setKzBoxes(calculateKillzones(klines, ictConfigRef.current));
+        setAmdDays(calculateAMD(klines, ictConfigRef.current.showAMD));
+        setDailyBias(calculateDailyBias(klines));
+        setOpLevels(calculateOpeningPrices(klines, ictConfigRef.current));
+        setDwmLevels(calculateDWM(klines, ictConfigRef.current));
+        setTsList(calculateTimestamps(klines, ictConfigRef.current));
         setFvgBoxes(calculateFVGs(klines, timeframe, fvgConfigRef.current));
         const { breaks: msbBrks, swings: msbSws } = calculateMarketStructure(klines, fvgConfigRef.current.msbLookback);
         setMsbBreaks(fvgConfigRef.current.showMSB ? msbBrks : []);
         setMsbSwings(fvgConfigRef.current.showMSB ? msbSws  : []);
+        setOteData(fvgConfigRef.current.showOTE ? calculateOTE(msbSws) : null);
         if (fvgConfigRef.current.showOB) {
           const obs = calculateOrderBlocks(klines, msbBrks, fvgConfigRef.current.maxOBCount);
           setObBoxes(fvgConfigRef.current.showBreaker ? obs : obs.filter((ob) => !ob.isBreaker));
@@ -1175,8 +1309,13 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             if (symPrefix !== nt8Prefix) return;
           }
           const price = tick.price;
+          if (!price || price <= 0 || isNaN(price)) return;
+          
           const arr = candlesRef.current;
           if (arr.length === 0) return;
+          
+          const last = arr[arr.length - 1];
+          if (price < last.close * 0.5 || price > last.close * 1.5) return; // Drop bad ticks/spikes
           // Check alerts
           const sym = symbolRef.current;
           const prevP = lastPriceForAlertsRef.current;
@@ -1191,7 +1330,6 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             }
           }
           lastPriceForAlertsRef.current = price;
-          const last = arr[arr.length - 1];
           const updated = {
             ...last,
             high: Math.max(last.high, price),
@@ -1208,7 +1346,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           });
           updateEMAs();
           updateRSI();
-          updateMACD();
+          updateMACD(); updateStoch();
           const prev = arr[arr.length - 2] ?? last;
           setLastPrice({
             value: price,
@@ -1233,7 +1371,11 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             const nt8Prefix = b.symbol.split(/\s/)[0].toUpperCase();
             if (symPrefix !== nt8Prefix) return;
           }
+          if (!b.open || b.open <= 0 || !b.high || b.high <= 0 || !b.low || b.low <= 0 || !b.close || b.close <= 0 || isNaN(b.open) || isNaN(b.high) || isNaN(b.low) || isNaN(b.close) || isNaN(b.time)) return;
+
           const arr = candlesRef.current;
+          // Wait for historical data to load before processing live bars
+          if (arr.length === 0) return;
 
           if (!bucketSecs) {
             // ── 1m: use NT8 values directly, no aggregation ──────────────
@@ -1271,19 +1413,29 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
 
           const cur = arr[arr.length - 1];
           candleSeriesRef.current.update({ time: cur.time as UTCTimestamp, open: cur.open, high: cur.high, low: cur.low, close: cur.close });
+          if (volumeSeriesRef.current) {
+            volumeSeriesRef.current.update({
+              time: cur.time as UTCTimestamp,
+              value: cur.volume,
+              color: cur.close >= cur.open ? `${TV_COLORS.green}66` : `${TV_COLORS.red}66`,
+            });
+          }
           updateEMAs();
           updateRSI();
-          updateMACD();
+          updateMACD(); updateStoch();
           if (b.type === "bar_close") {
             const cfg = fvgConfigRef.current;
             setFvgBoxes(calculateFVGs(arr, timeframe, cfg));
             const { breaks: msbBrks2, swings: msbSws2 } = calculateMarketStructure(arr, cfg.msbLookback);
             setMsbBreaks(cfg.showMSB ? msbBrks2 : []);
             setMsbSwings(cfg.showMSB ? msbSws2  : []);
+            setOteData(cfg.showOTE ? calculateOTE(msbSws2) : null);
             if (cfg.showOB) {
               const obs = calculateOrderBlocks(arr, msbBrks2, cfg.maxOBCount);
               setObBoxes(cfg.showBreaker ? obs : obs.filter((ob) => !ob.isBreaker));
             }
+            setMacroBoxes(calculateMacros(arr, macrosConfigRef.current));
+            setDailyBias(calculateDailyBias(arr));
           }
           const prev = arr[arr.length - 2];
           setLastPrice({
@@ -1307,7 +1459,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             }
             const cur = arr[arr.length - 1];
             candleSeriesRef.current.update({ time: cur.time as UTCTimestamp, open: cur.open, high: cur.high, low: cur.low, close: cur.close });
-            updateEMAs(); updateRSI(); updateMACD();
+            updateEMAs(); updateRSI(); updateMACD(); updateStoch();
             const prev = arr[arr.length - 2];
             setLastPrice({
               value: k.close,
@@ -1339,7 +1491,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
               }
               const cur = arr[arr.length - 1];
               candleSeriesRef.current.update({ time: cur.time as UTCTimestamp, open: cur.open, high: cur.high, low: cur.low, close: cur.close });
-              updateEMAs(); updateRSI(); updateMACD();
+              updateEMAs(); updateRSI(); updateMACD(); updateStoch();
               const prev = arr[arr.length - 2];
               setLastPrice({
                 value: k.close,
@@ -1349,7 +1501,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           });
         }
       } catch (e) {
-        console.error("Failed to load chart data:", e);
+        console.warn("Failed to load chart data:", e);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1361,7 +1513,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       cancelled = true;
       if (unsub) unsub();
     };
-  }, [symbol, timeframe, useNT8, useTradovate]);
+  }, [symbol, timeframe, useNT8, useTradovate, useChartStore.getState().nt8OffsetHours]);
 
   const greenOrRed = (n: number) =>
     n >= 0 ? "text-tv-green" : "text-tv-red";
@@ -1470,6 +1622,39 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   }
   void renderTick;
 
+  const handleZoom = (direction: 1 | -1) => {
+    if (!chartRef.current) return;
+    const ts = chartRef.current.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    if (!range) return;
+    const delta = (range.to - range.from) * 0.1 * direction;
+    ts.setVisibleLogicalRange({ from: range.from + delta, to: range.to - delta });
+  };
+
+  const handleScroll = (direction: 1 | -1) => {
+    if (!chartRef.current) return;
+    const ts = chartRef.current.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    if (!range) return;
+    const delta = (range.to - range.from) * 0.1 * direction;
+    ts.setVisibleLogicalRange({ from: range.from + delta, to: range.to + delta });
+  };
+
+  const handleReset = () => {
+    if (!chartRef.current) return;
+    const ts = chartRef.current.timeScale();
+    ts.scrollToPosition(0, true);
+    // Let autoScale handle the Y axis
+  };
+
+  const tfToMinutes = (tf: string) => {
+    if (tf === "D") return 1440;
+    if (tf === "W") return 10080;
+    if (tf === "M") return 43200;
+    return parseInt(tf, 10) || 1440;
+  };
+  const isKzTimeframeOk = tfToMinutes(timeframe) <= ictConfig.timeframeLimit;
+
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
@@ -1522,8 +1707,17 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           showSwings={fvgConfig.showSwings}
         />
       )}
+      {indicators.fvg && !hidden.fvg && fvgConfig.showOTE && chartRef.current && candleSeriesRef.current && oteData && (
+        <OTEOverlay
+          chart={chartRef.current}
+          series={candleSeriesRef.current}
+          ote={oteData}
+          textColor={ictConfig.textColor}
+          labelSize={ictConfig.labelSize}
+        />
+      )}
       <FvgSettingsDialog open={fvgSettingsOpen} onClose={() => setFvgSettingsOpen(false)} />
-      {indicators.ict && !hidden.ict && chartRef.current && candleSeriesRef.current && kzBoxes.length > 0 && (
+      {indicators.ict && !hidden.ict && isKzTimeframeOk && chartRef.current && candleSeriesRef.current && kzBoxes.length > 0 && (
         <KillzonesOverlay
           chart={chartRef.current}
           series={candleSeriesRef.current}
@@ -1531,7 +1725,25 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           config={ictConfig}
         />
       )}
+      {indicators.ict && !hidden.ict && isKzTimeframeOk && chartRef.current && candleSeriesRef.current && amdDays.length > 0 && (
+        <AMDOverlay
+          chart={chartRef.current}
+          series={candleSeriesRef.current}
+          days={amdDays}
+          textColor={ictConfig.textColor}
+          labelSize={ictConfig.labelSize}
+        />
+      )}
+      {indicators.ictMacros && !hidden.ictMacros && isKzTimeframeOk && chartRef.current && candleSeriesRef.current && macroBoxes.length > 0 && (
+        <IctMacrosOverlay
+          chart={chartRef.current}
+          series={candleSeriesRef.current}
+          boxes={macroBoxes}
+          paneHeight={paneOffsets[0]?.height ?? 400}
+        />
+      )}
       <IctSettingsDialog open={ictSettingsOpen} onClose={() => setIctSettingsOpen(false)} />
+      <MacrosSettingsDialog open={macrosSettingsOpen} onClose={() => setMacrosSettingsOpen(false)} />
       {indicators.ict && !hidden.ict && chartRef.current && candleSeriesRef.current && (
         <LevelsOverlay
           chart={chartRef.current}
@@ -1667,14 +1879,34 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             />
           )}
           {indicators.ict && (
+            <>
+              <IndicatorPill
+                name="SMC / ICT"
+                value={kzBoxes.length > 0 ? `${kzBoxes.length} sess` : undefined}
+                color={INDICATOR_COLORS.ict}
+                hidden={hidden.ict}
+                onToggleHide={() => toggleHidden("ict")}
+                onSettings={() => setIctSettingsOpen(true)}
+                onRemove={() => removeIndicator("ict")}
+              />
+              {!hidden.ict && dailyBias !== "Neutral" && (
+                <IndicatorPill
+                  name="Daily Bias"
+                  value={dailyBias === "Bullish" ? "Alcista 🟢" : "Bajista 🔴"}
+                  color={dailyBias === "Bullish" ? TV_COLORS.green : TV_COLORS.red}
+                />
+              )}
+            </>
+          )}
+          {indicators.ictMacros && (
             <IndicatorPill
-              name="ICT KZ"
-              value={kzBoxes.length > 0 ? `${kzBoxes.length} sess` : undefined}
-              color={INDICATOR_COLORS.ict}
-              hidden={hidden.ict}
-              onToggleHide={() => toggleHidden("ict")}
-              onSettings={() => setIctSettingsOpen(true)}
-              onRemove={() => removeIndicator("ict")}
+              name="ICT Macros"
+              value={macroBoxes.length > 0 ? `${macroBoxes.length} macros` : undefined}
+              color={INDICATOR_COLORS.ictMacros}
+              hidden={hidden.ictMacros}
+              onToggleHide={() => toggleHidden("ictMacros")}
+              onSettings={() => setMacrosSettingsOpen(true)}
+              onRemove={() => removeIndicator("ictMacros")}
             />
           )}
           {indicators.fvg && (
@@ -1730,6 +1962,66 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           />
         </div>
       )}
+
+      {/* Stochastic pane label */}
+      {indicators.stoch && paneOffsets[(indicators.rsi ? 1 : 0) + (indicators.macd ? 1 : 0) + 1] && (
+        <div
+          style={{ top: paneOffsets[(indicators.rsi ? 1 : 0) + (indicators.macd ? 1 : 0) + 1].top + 6, left: 12 }}
+          className="pointer-events-none absolute z-10"
+        >
+          <IndicatorPill
+            name={`Stoch ${config.stochK}, ${config.stochD}`}
+            value={
+              lastValues.stochK !== undefined
+                ? `${lastValues.stochK.toFixed(2)} / ${(lastValues.stochD ?? 0).toFixed(2)}`
+                : undefined
+            }
+            color={INDICATOR_COLORS.stoch || "#2196f3"}
+            hidden={hidden.stoch}
+            onToggleHide={() => toggleHidden("stoch")}
+            onSettings={() => setSettingsTarget("stoch")}
+            onRemove={() => removeIndicator("stoch")}
+          />
+        </div>
+      )}
+      {/* Chart Navigation Toolbar */}
+      <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center gap-1 rounded-md border border-tv-border bg-tv-bg p-1 opacity-20 transition-opacity duration-200 hover:opacity-100">
+        <button
+          onClick={() => handleZoom(-1)}
+          className="flex h-8 w-8 items-center justify-center rounded text-tv-text-muted hover:bg-tv-hover hover:text-tv-text"
+          title="Alejar"
+        >
+          <Minus size={18} />
+        </button>
+        <button
+          onClick={() => handleZoom(1)}
+          className="flex h-8 w-8 items-center justify-center rounded text-tv-text-muted hover:bg-tv-hover hover:text-tv-text"
+          title="Acercar"
+        >
+          <Plus size={18} />
+        </button>
+        <button
+          onClick={() => handleScroll(-1)}
+          className="flex h-8 w-8 items-center justify-center rounded text-tv-text-muted hover:bg-tv-hover hover:text-tv-text"
+          title="Mover Izquierda"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <button
+          onClick={() => handleScroll(1)}
+          className="flex h-8 w-8 items-center justify-center rounded text-tv-text-muted hover:bg-tv-hover hover:text-tv-text"
+          title="Mover Derecha"
+        >
+          <ChevronRight size={18} />
+        </button>
+        <button
+          onClick={handleReset}
+          className="flex h-8 w-8 items-center justify-center rounded text-tv-text-muted hover:bg-tv-hover hover:text-tv-text"
+          title="Reiniciar Vista"
+        >
+          <RotateCcw size={16} />
+        </button>
+      </div>
     </div>
   );
 }

@@ -136,27 +136,54 @@ export function NT8Connect() {
     ? `NT8 · ${nt8Instrument}${health === "warn" ? " · sin ticks recientes" : health === "dead" ? " · conexión muerta" : ""} · Ctrl+Shift+N para desconectar`
     : "Conectar NinjaTrader 8 (Ctrl+Shift+N)";
 
+  const nt8OffsetHours = useChartStore((s) => s.nt8OffsetHours);
+  const setNt8OffsetHours = useChartStore((s) => s.setNt8OffsetHours);
+
   return (
-    <button
-      onClick={nt8Connected ? disconnect : () => connect(false)}
-      disabled={loading}
-      className={cn("flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition-colors hover:bg-tv-panel-hover", textColor)}
-      title={title}
-    >
-      {loading ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : nt8Connected ? (
-        <>
-          <span className={cn("inline-flex h-1.5 w-1.5 rounded-full", dotColor, health === "ok" && "animate-pulse")} />
-          <Activity className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{nt8Instrument ?? "NT8"}</span>
-        </>
-      ) : (
-        <>
-          <Activity className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">NT8</span>
-        </>
+    <div className="flex items-center gap-1">
+      <button
+        onClick={nt8Connected ? disconnect : () => connect(false)}
+        disabled={loading}
+        className={cn("flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition-colors hover:bg-tv-panel-hover", textColor)}
+        title={title}
+      >
+        {loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : nt8Connected ? (
+          <>
+            <span className={cn("inline-flex h-1.5 w-1.5 rounded-full", dotColor, health === "ok" && "animate-pulse")} />
+            <Activity className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{nt8Instrument ?? "NT8"}</span>
+          </>
+        ) : (
+          <>
+            <Activity className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">NT8</span>
+          </>
+        )}
+      </button>
+
+      {nt8Connected && (
+        <div className="flex items-center rounded bg-tv-panel-hover text-xs text-tv-text-muted">
+          <button
+            onClick={() => setNt8OffsetHours(nt8OffsetHours - 1)}
+            className="px-1.5 py-1 hover:text-tv-text transition-colors"
+            title="Reducir desfase horario"
+          >
+            -
+          </button>
+          <span className="min-w-[1.5rem] text-center" title="Desfase horario actual de NT8 (horas)">
+            {nt8OffsetHours > 0 ? `+${nt8OffsetHours}` : nt8OffsetHours}
+          </span>
+          <button
+            onClick={() => setNt8OffsetHours(nt8OffsetHours + 1)}
+            className="px-1.5 py-1 hover:text-tv-text transition-colors"
+            title="Aumentar desfase horario"
+          >
+            +
+          </button>
+        </div>
       )}
-    </button>
+    </div>
   );
 }

@@ -1,7 +1,30 @@
-const NT8_WS_URL = "ws://localhost:4001";
+import { useChartStore } from "@/lib/store/chart-store";
 
-/** Misma corrección que en rest.ts — Colombia (UTC-5) vs ET actual */
-function nt8TimestampCorrection(): number {
+export interface TickMessage {
+  type: "tick";
+  symbol?: string;
+  price: number;
+}
+
+export interface BarMessage {
+  type: "bar" | "bar_close";
+  symbol?: string;
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export type TickCallback = (msg: TickMessage) => void;
+export type BarCallback = (msg: BarMessage) => void;
+
+const NT8_WS_URL = "ws://localhost:4001";
+let cachedCorr: number | null = null;
+
+export function nt8TimestampCorrection(): number {
+  if (cachedCorr !== null) return cachedCorr;
   const now = new Date();
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -13,14 +36,15 @@ function nt8TimestampCorrection(): number {
   const get = (t: string) => parseInt(parts.find((p) => p.type === t)?.value ?? "0");
   const h = get("hour") === 24 ? 0 : get("hour");
   const etAsUtc = Date.UTC(get("year"), get("month") - 1, get("day"), h, get("minute"), get("second"));
-  const etOffsetSec = Math.round((etAsUtc - now.getTime()) / 1000);
-  return (-etOffsetSec) - 18000; // -3600 en verano, 0 en invierno
+  const nowSecs = Math.floor(now.getTime() / 1000) * 1000;
+  const etOffsetSec = Math.round((etAsUtc - nowSecs) / 1000);
+  const rawCorr = (-etOffsetSec) - 18000;
+  cachedCorr = Math.round(rawCorr / 1800) * 1800; // Round to nearest 30m block
+  return cachedCorr;
 }
 
-type TickCallback = (tick: { price: number; symbol?: string }) => void;
-type BarCallback = (bar: { type: "bar" | "bar_close"; symbol?: string; time: number; open: number; high: number; low: number; close: number; volume: number }) => void;
 
-class NT8WSClient {
+export class NT8WSClient {
   private ws: WebSocket | null = null;
   private tickCbs = new Set<TickCallback>();
   private barCbs = new Set<BarCallback>();
@@ -56,10 +80,38 @@ class NT8WSClient {
         const msg = JSON.parse(e.data as string);
         this._lastEventAt = Date.now();
         if (msg.type === "tick") {
-          this.tickCbs.forEach((cb) => cb(msg));
+          const price = msg.price ?? msg.Price ?? msg.p ?? msg.P ?? 0;
+          if (price > 0 && !isNaN(price)) {
+            this.tickCbs.forEach((cb) => cb({ ...msg, price }));
+          }
         } else if (msg.type === "bar" || msg.type === "bar_close") {
-          const corr = nt8TimestampCorrection();
-          this.barCbs.forEach((cb) => cb({ ...msg, time: msg.time + corr }));
+          if (!(window as any).loggedNT8) {
+            (window as any).loggedNT8 = true;
+            fetch('/api/log', { method: 'POST', body: JSON.stringify({ source: 'nt8_ws', msg }) }).catch(console.error);
+          }
+          const nt8OffsetHours = useChartStore.getState().nt8OffsetHours;
+          const offsetSecs = nt8OffsetHours * 3600;
+          
+          const open = msg.open ?? msg.Open ?? msg.o ?? msg.O ?? 0;
+          const high = msg.high ?? msg.High ?? msg.h ?? msg.H ?? 0;
+          const low = msg.low ?? msg.Low ?? msg.l ?? msg.L ?? 0;
+          const close = msg.close ?? msg.Close ?? msg.c ?? msg.C ?? 0;
+          const volume = msg.volume ?? msg.Volume ?? msg.v ?? msg.V ?? 0;
+          
+          if (open > 0 && high > 0 && low > 0 && close > 0 && !isNaN(open) && !isNaN(high) && !isNaN(low) && !isNaN(close)) {
+            // Drop bad ticks/spikes that go to 0 and destroy chart scaling
+            if (low < close * 0.5 || high > close * 1.5) return;
+
+            // Truncate time to minute boundary to prevent each update creating a new bar
+            const rawTime = msg.time ?? msg.Time ?? msg.t ?? msg.T ?? 0;
+            const isMs = rawTime > 100000000000;
+            const tSecs = isMs ? rawTime / 1000 : rawTime;
+            const time = Math.floor(tSecs / 60) * 60 + offsetSecs;
+            
+            if (!isNaN(time)) {
+              this.barCbs.forEach((cb) => cb({ ...msg, time, open, high, low, close, volume }));
+            }
+          }
         }
       } catch { /* ignore malformed */ }
     };

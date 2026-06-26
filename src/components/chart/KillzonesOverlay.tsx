@@ -13,10 +13,9 @@ interface Props {
 }
 
 const FONT_SIZE: Record<LabelSize, number> = { small: 9, medium: 11, large: 13 };
-const EXTEND_X = 9999;
-
 export function KillzonesOverlay({ chart, series, boxes, config }: Props) {
   const ts = chart.timeScale();
+  const paneWidth = ts.width();
   const fs = FONT_SIZE[config.labelSize];
 
   const elements: React.ReactNode[] = [];
@@ -125,10 +124,10 @@ export function KillzonesOverlay({ chart, series, boxes, config }: Props) {
         if (config.pivotExtend === "none") {
           lineX2 = boxRight;
         } else if (config.pivotExtend === "always") {
-          lineX2 = EXTEND_X;
+          lineX2 = paneWidth;
         } else {
           // "mitigated": extend until mitigated, then stop at box right
-          lineX2 = lvl.mitigated ? boxRight : EXTEND_X;
+          lineX2 = lvl.mitigated ? boxRight : paneWidth;
         }
 
         const stopDraw = config.stopOnceMitigated && lvl.mitigated;
@@ -151,6 +150,10 @@ export function KillzonesOverlay({ chart, series, boxes, config }: Props) {
         if (config.showPivotLabels && lvl.label) {
           const labelX = config.pivotRightSide ? lineX2 : x1;
           const anchor = config.pivotRightSide ? "end" : "start";
+          // If anchored to the right edge of the pane, give a slightly larger margin so it doesn't touch the scale
+          const isAtRightEdge = config.pivotRightSide && lineX2 === paneWidth;
+          const offsetX = isAtRightEdge ? -6 : config.pivotRightSide ? -3 : 3;
+
           const priceStr = config.pivotDisplayPrice
             ? ` ${formatPrice(lvl.y === yH ? box.high : lvl.y === yL ? box.low : box.mid)}`
             : "";
@@ -158,8 +161,8 @@ export function KillzonesOverlay({ chart, series, boxes, config }: Props) {
           elements.push(
             <text
               key={`plabel-${box.session}-${box.startTime}-${lvl.label}`}
-              x={labelX + (config.pivotRightSide ? -3 : 3)}
-              y={lvl.y - 3}
+              x={labelX + offsetX}
+              y={lvl.y - 4}
               fontSize={fs}
               fill={config.textColor}
               textAnchor={anchor}

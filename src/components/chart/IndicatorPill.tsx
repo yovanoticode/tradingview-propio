@@ -7,10 +7,10 @@ interface Props {
   name: string;
   value?: string;
   color: string;
-  hidden: boolean;
-  onToggleHide: () => void;
-  onSettings: () => void;
-  onRemove: () => void;
+  hidden?: boolean;
+  onToggleHide?: () => void;
+  onSettings?: () => void;
+  onRemove?: () => void;
 }
 
 export function IndicatorPill({
@@ -38,34 +38,36 @@ export function IndicatorPill({
         <span className="tabular-nums text-tv-text-muted">{value}</span>
       )}
       <div className="ml-1 flex items-center gap-0.5">
-        <button
-          onClick={onToggleHide}
-          title={hidden ? "Mostrar" : "Ocultar"}
-          aria-label={hidden ? "Mostrar" : "Ocultar"}
-          className="rounded p-0.5 text-tv-text-dim transition-colors hover:bg-tv-panel-hover hover:text-tv-text"
-        >
-          {hidden ? (
-            <EyeOff className="h-3 w-3" />
-          ) : (
-            <Eye className="h-3 w-3" />
-          )}
-        </button>
-        <button
-          onClick={onSettings}
-          title="Configurar"
-          aria-label="Configurar"
-          className="rounded p-0.5 text-tv-text-dim transition-colors hover:bg-tv-panel-hover hover:text-tv-text"
-        >
-          <Settings className="h-3 w-3" />
-        </button>
-        <button
-          onClick={onRemove}
-          title="Eliminar"
-          aria-label="Eliminar"
-          className="rounded p-0.5 text-tv-text-dim transition-colors hover:bg-tv-panel-hover hover:text-tv-red"
-        >
-          <X className="h-3 w-3" />
-        </button>
+        {onToggleHide && (
+          <button
+            onClick={onToggleHide}
+            title={hidden ? "Mostrar" : "Ocultar"}
+            aria-label={hidden ? "Mostrar" : "Ocultar"}
+            className="rounded p-0.5 text-tv-text-dim transition-colors hover:bg-tv-panel-hover hover:text-tv-text"
+          >
+            {hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+          </button>
+        )}
+        {onSettings && (
+          <button
+            onClick={onSettings}
+            title="Configurar"
+            aria-label="Configurar"
+            className="rounded p-0.5 text-tv-text-dim transition-colors hover:bg-tv-panel-hover hover:text-tv-text"
+          >
+            <Settings className="h-3 w-3" />
+          </button>
+        )}
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            title="Eliminar"
+            aria-label="Eliminar"
+            className="rounded p-0.5 text-tv-text-dim transition-colors hover:bg-tv-panel-hover hover:text-tv-red"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
       </div>
     </div>
   );

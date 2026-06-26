@@ -1,0 +1,13 @@
+{
+  "source": "nt8_ws",
+  "msg": {
+    "type": "bar",
+    "symbol": "MNQ 06-26",
+    "time": 1780942860,
+    "open": 29505.5,
+    "high": 29522.5,
+    "low": 29502.5,
+    "close": 29514.75,
+    "volume": 2654
+  }
+}

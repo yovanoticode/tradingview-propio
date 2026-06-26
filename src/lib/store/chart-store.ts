@@ -15,7 +15,9 @@ export type IndicatorKey =
   | "ict"
   | "vwap"
   | "volumeProfile"
-  | "fvg";
+  | "fvg"
+  | "stoch"
+  | "ictMacros";
 
 export type DrawingTool = "cursor" | "hline" | "measure" | "eraser" | "alert" | "long_position" | "short_position" | "position_forecast";
 
@@ -62,10 +64,17 @@ export interface IndicatorConfig {
   macdFast: number;
   macdSlow: number;
   macdSignal: number;
+  stochK: number;
+  stochD: number;
+  stochKVisible: boolean;
+  stochDVisible: boolean;
+  stochKColor: string;
+  stochDColor: string;
 }
 
 export interface Tab {
   id: string;
+  type?: "chart" | "heatmap";
   symbol: string;
   timeframe: Timeframe;
   indicators: Record<IndicatorKey, boolean>;
@@ -99,11 +108,12 @@ export interface TimestampRow {
 }
 
 export interface DWMConfig {
-  showDOpen: boolean; showDHL: boolean; dColor: string;
-  showWOpen: boolean; showWHL: boolean; wColor: string;
-  showMOpen: boolean; showMHL: boolean; mColor: string;
+  showDOpen: boolean; showDHL: boolean; showPDHL: boolean; dColor: string;
+  showWOpen: boolean; showWHL: boolean; showPWHL: boolean; wColor: string;
+  showMOpen: boolean; showMHL: boolean; showPMHL: boolean; mColor: string;
   showDayLabels: boolean;
   hideWeekendLabels: boolean;
+  cmeShift: boolean;
 }
 
 export interface IctSessionLabelConfig {
@@ -127,6 +137,8 @@ export interface FvgConfig {
   showMSB: boolean;      // show BOS / CHoCH labels
   showSwings: boolean;   // show swing highs/lows markers
   msbLookback: number;   // swing detection lookback in bars (default 3)
+  // OTE
+  showOTE: boolean;      // show Optimal Trade Entry fib levels on latest swing
 }
 
 export const DEFAULT_FVG_CONFIG: FvgConfig = {
@@ -136,12 +148,34 @@ export const DEFAULT_FVG_CONFIG: FvgConfig = {
   maxActive: 5,
   minSizePts: 0,
   showOB: true,
-  showBreaker: true,
+  showBreaker: false,
   maxOBCount: 5,
   showMSB: true,
-  showSwings: true,
+  showSwings: false,
   msbLookback: 3,
+  showOTE: true,
 };
+
+export interface IctMacroConfig {
+  name: string;
+  startH: number;
+  startM: number;
+  endH: number;
+  endM: number;
+  enabled: boolean;
+  color: string;
+}
+
+export const DEFAULT_MACROS_CONFIG: IctMacroConfig[] = [
+  { name: "02:33 AM - 03:00", startH: 2, startM: 33, endH: 3, endM: 0, enabled: false, color: "#8b5cf6" },
+  { name: "04:03 AM - 04:30", startH: 4, startM: 3, endH: 4, endM: 30, enabled: false, color: "#8b5cf6" },
+  { name: "08:50 AM - 09:10", startH: 8, startM: 50, endH: 9, endM: 10, enabled: false, color: "#8b5cf6" },
+  { name: "09:50 AM - 10:10", startH: 9, startM: 50, endH: 10, endM: 10, enabled: true, color: "#8b5cf6" },
+  { name: "10:50 AM - 11:10", startH: 10, startM: 50, endH: 11, endM: 10, enabled: true, color: "#8b5cf6" },
+  { name: "11:50 AM - 12:10", startH: 11, startM: 50, endH: 12, endM: 10, enabled: false, color: "#8b5cf6" },
+  { name: "13:10 PM - 13:40", startH: 13, startM: 10, endH: 13, endM: 40, enabled: true, color: "#8b5cf6" },
+  { name: "15:15 PM - 15:45", startH: 15, startM: 15, endH: 15, endM: 45, enabled: true, color: "#8b5cf6" },
+];
 
 export type PivotExtend = "mitigated" | "always" | "none";
 export type LabelSize = "small" | "medium" | "large";
@@ -163,9 +197,11 @@ export interface IctConfig {
   pivotExtend: PivotExtend;
   stopOnceMitigated: boolean;
   sessionLabels: IctSessionLabelConfig[];
+  showAMD: boolean; // AMD / PO3
 
   // Opening Prices
   openingPrices: OpeningPriceRow[];
+  openingPricesOnlyToday: boolean;
 
   // Timestamps
   timestamps: TimestampRow[];
@@ -174,6 +210,7 @@ export interface IctConfig {
   dwm: DWMConfig;
 
   // Configuración
+  timeframeLimit: number; // in minutes
   sessionDrawingLimit: number;
   textColor: string;
   labelSize: LabelSize;
@@ -209,6 +246,7 @@ export const DEFAULT_ICT_CONFIG: IctConfig = {
     { highLabel: "NYL.H",        lowLabel: "NYL.L" },
     { highLabel: "NYPM.H",       lowLabel: "NYPM.L" },
   ],
+  showAMD: true,
 
   openingPrices: [
     { enabled: true,  name: "Medianoche", timeH: 0,  timeM: 0,  color: "#ffffff" },
@@ -220,24 +258,25 @@ export const DEFAULT_ICT_CONFIG: IctConfig = {
     { enabled: false, name: "",           timeH: 0,  timeM: 0,  color: "#787b86" },
     { enabled: false, name: "",           timeH: 0,  timeM: 0,  color: "#787b86" },
   ],
+  openingPricesOnlyToday: true,
 
   timestamps: [
-    { enabled: true, timeH: 0,  timeM: 0,  color: "#ffffff" },
-    { enabled: true, timeH: 11, timeM: 0,  color: "#f59e0b" },
-    { enabled: true, timeH: 8,  timeM: 30, color: "#a855f7" },
-    { enabled: true, timeH: 9,  timeM: 30, color: "#7c3aed" },
+    { enabled: false, timeH: 8, timeM: 30, color: "#a855f7", label: "8:30" },
+    { enabled: false, timeH: 9, timeM: 30, color: "#7c3aed", label: "9:30" },
   ],
 
   dwm: {
-    showDOpen: false, showDHL: true,  dColor: "#ffffff",
-    showWOpen: false, showWHL: true,  wColor: "#ffffff",
-    showMOpen: false, showMHL: true,  mColor: "#ef4444",
+    showDOpen: true, showDHL: true, showPDHL: true, dColor: "#facc15",
+    showWOpen: false, showWHL: false, showPWHL: false, wColor: "#38bdf8",
+    showMOpen: false, showMHL: false, showPMHL: false, mColor: "#a78bfa",
     showDayLabels: true,
     hideWeekendLabels: true,
+    cmeShift: true,
   },
 
+  timeframeLimit: 1440,
   sessionDrawingLimit: 3,
-  textColor: "#d1d4dc",
+  textColor: "#d1d5db",
   labelSize: "small",
   cutoffEnabled: true,
   cutoffH: 16,
@@ -246,12 +285,12 @@ export const DEFAULT_ICT_CONFIG: IctConfig = {
 
 export const DEFAULT_INDICATORS: Record<IndicatorKey, boolean> = {
   ema20: true, ema50: true, ema200: false, rsi: true, macd: false,
-  volume: true, orb: true, ict: false, vwap: false, volumeProfile: false, fvg: false,
+  volume: true, orb: true, ict: false, vwap: false, volumeProfile: false, fvg: false, stoch: false, ictMacros: false,
 };
 
 export const DEFAULT_HIDDEN: Record<IndicatorKey, boolean> = {
   ema20: false, ema50: false, ema200: false, rsi: false, macd: false,
-  volume: false, orb: false, ict: false, vwap: false, volumeProfile: false, fvg: false,
+  volume: false, orb: false, ict: false, vwap: false, volumeProfile: false, fvg: false, stoch: false, ictMacros: false,
 };
 
 export const DEFAULT_CONFIG: IndicatorConfig = {
@@ -262,6 +301,12 @@ export const DEFAULT_CONFIG: IndicatorConfig = {
   macdFast: 12,
   macdSlow: 26,
   macdSignal: 9,
+  stochK: 14,
+  stochD: 3,
+  stochKVisible: true,
+  stochDVisible: true,
+  stochKColor: "#2196f3",
+  stochDColor: "#ff9800",
 };
 
 export const INDICATOR_COLORS: Record<IndicatorKey, string> = {
@@ -276,6 +321,8 @@ export const INDICATOR_COLORS: Record<IndicatorKey, string> = {
   vwap: "#fbbf24",
   volumeProfile: "#60a5fa",
   fvg: "#26a69a",
+  stoch: "#ff9800",
+  ictMacros: "#8b5cf6",
 };
 
 export const DEFAULT_WATCHLIST = [
@@ -316,6 +363,9 @@ interface ChartState {
   fvgConfig: FvgConfig;
   setFvgConfig: (c: FvgConfig) => void;
 
+  macrosConfig: IctMacroConfig[];
+  setMacrosConfig: (c: IctMacroConfig[]) => void;
+
   // ICT Killzones config
   ictConfig: IctConfig;
   setIctConfig: (c: IctConfig) => void;
@@ -327,6 +377,8 @@ interface ChartState {
   // Layout
   layoutMode: LayoutMode;
   setLayoutMode: (m: LayoutMode) => void;
+  rightSidebarVisible: boolean;
+  toggleRightSidebar: () => void;
   activeSlot: number;
   setActiveSlot: (slot: number) => void;
   slots: { symbol: string; timeframe: Timeframe; dataSource?: "nt8" | "yahoo" | "tradovate" }[];
@@ -346,8 +398,10 @@ interface ChartState {
   nt8Instrument: string | null;
   nt8Instruments: string[];
   nt8WasConnected: boolean; // persisted — triggers auto-reconnect on load
+  nt8OffsetHours: number;
   setNT8: (connected: boolean, instrument?: string | null) => void;
   setNT8Instruments: (instruments: string[]) => void;
+  setNt8OffsetHours: (h: number) => void;
 
   // Tradovate connection (ephemeral / persisted token)
   tradovateToken: string | null;
@@ -369,7 +423,7 @@ interface ChartState {
   settingsTarget: IndicatorKey | null;
 
   // Tab actions
-  addTab: (symbol?: string, timeframe?: Timeframe) => void;
+  addTab: (symbol?: string, timeframe?: Timeframe, type?: "chart" | "heatmap") => void;
   closeTab: (id: string) => void;
   switchTab: (id: string) => void;
 
@@ -406,6 +460,9 @@ export const useChartStore = create<ChartState>()(
       fvgConfig: { ...DEFAULT_FVG_CONFIG }, // always merged with defaults on hydration below
       setFvgConfig: (fvgConfig) => set({ fvgConfig }),
 
+      macrosConfig: [...DEFAULT_MACROS_CONFIG],
+      setMacrosConfig: (macrosConfig) => set({ macrosConfig }),
+
       ictConfig: DEFAULT_ICT_CONFIG,
       setIctConfig: (ictConfig) => set({ ictConfig }),
 
@@ -414,6 +471,8 @@ export const useChartStore = create<ChartState>()(
 
       layoutMode: "single",
       setLayoutMode: (layoutMode) => set({ layoutMode }),
+      rightSidebarVisible: true,
+      toggleRightSidebar: () => set((s) => ({ rightSidebarVisible: !s.rightSidebarVisible })),
       activeSlot: 0,
       setActiveSlot: (activeSlot) =>
         set((s) => {
@@ -463,6 +522,7 @@ export const useChartStore = create<ChartState>()(
       nt8Instrument: null,
       nt8Instruments: [],
       nt8WasConnected: false,
+      nt8OffsetHours: -1, // Default to -1 as requested/identified
       setNT8: (connected, instrument = null) =>
         set((s) => ({
           nt8Connected: connected,
@@ -471,6 +531,7 @@ export const useChartStore = create<ChartState>()(
           nt8WasConnected: connected || s.nt8WasConnected,
         })),
       setNT8Instruments: (nt8Instruments) => set({ nt8Instruments }),
+      setNt8OffsetHours: (h) => set({ nt8OffsetHours: h }),
 
       tradovateToken: null,
       tradovateEnv: "demo",
@@ -497,13 +558,13 @@ export const useChartStore = create<ChartState>()(
       symbolDialogOpen: false,
       settingsTarget: null,
 
-      addTab: (symbol, timeframe) =>
+      addTab: (symbol, timeframe, type = "chart") =>
         set((s) => {
           const id = newId();
-          const sym = symbol ?? s.symbol;
+          const sym = symbol ?? (type === "heatmap" ? "NQ100" : s.symbol);
           const tf = timeframe ?? s.timeframe;
           const newTab: Tab = {
-            id, symbol: sym, timeframe: tf,
+            id, type, symbol: sym, timeframe: tf,
             indicators: { ...s.indicators },
             hidden: { ...s.hidden },
             config: { ...s.config },
@@ -673,7 +734,7 @@ export const useChartStore = create<ChartState>()(
     }),
     {
       name: "tv-futures-chart-state",
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, version: number) => {
         const s = persisted as Record<string, any>;
         if (version === 0) {
@@ -708,6 +769,16 @@ export const useChartStore = create<ChartState>()(
           s.tradovateToken = s.tradovateToken ?? null;
           s.tradovateEnv = s.tradovateEnv ?? "demo";
         }
+        if (version < 5) {
+          s.macrosConfig = s.macrosConfig || [...DEFAULT_MACROS_CONFIG];
+          s.indicators = { ...DEFAULT_INDICATORS, ...s.indicators };
+          s.hidden = { ...DEFAULT_HIDDEN, ...s.hidden };
+          s.tabs = (s.tabs ?? []).map((t: any) => ({
+            ...t,
+            indicators: { ...DEFAULT_INDICATORS, ...t.indicators },
+            hidden: { ...DEFAULT_HIDDEN, ...t.hidden },
+          }));
+        }
         return s;
       },
       partialize: (s) => ({
@@ -720,6 +791,7 @@ export const useChartStore = create<ChartState>()(
         config: s.config,
         watchlist: s.watchlist,
         fvgConfig: s.fvgConfig,
+        macrosConfig: s.macrosConfig,
         ictConfig: s.ictConfig,
         chartTimezone: s.chartTimezone,
         alerts: s.alerts,

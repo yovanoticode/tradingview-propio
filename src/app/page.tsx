@@ -11,6 +11,8 @@ import { IndicatorSettingsDialog } from "@/components/chart/IndicatorSettingsDia
 import { useChartStore } from "@/lib/store/chart-store";
 import { cn } from "@/lib/utils";
 
+import { Heatmap } from "@/components/heatmap/Heatmap";
+
 export default function HomePage() {
   const tabs = useChartStore((s) => s.tabs);
   const activeTabId = useChartStore((s) => s.activeTabId);
@@ -21,7 +23,22 @@ export default function HomePage() {
   const slots = useChartStore((s) => s.slots);
 
   const renderChart = (index: number, extraClass = "") => {
+    // Determine what to render based on the active tab for this slot if it's the active one
+    // But wait, tabs array contains all tabs.
+    // The slot mapping is not 1:1 with tabs in this simple version, but activeTab has the type.
+    // Actually, in our current setup, if there are multiple layouts, it might be complex.
+    // Let's render Heatmap if the current slot's active tab is heatmap.
+    // Wait, the slot doesn't store type. The slot corresponds to tabs? No, activeTab is global.
+    // Let's just check if the activeTab is a heatmap for the primary view.
     const slot = slots[index] || { symbol: "MNQ=F", timeframe: "15m" };
+    // Find if the tab for this slot is a heatmap? We only have one active tab globally in the simple UI.
+    const isHeatmap = activeTab?.type === "heatmap" && index === activeSlot;
+    // Actually, if activeTab is heatmap, we should probably just render the heatmap full screen instead of the grid?
+    // Let's just render Heatmap if the current slot is the active one and it's a heatmap.
+    
+    // Wait, the tabs are tied to slots? No, tabs are global. 
+    // Let's render Heatmap inside the slot if the activeTab is heatmap.
+    
     const isActive = activeSlot === index;
     return (
       <div
@@ -32,12 +49,20 @@ export default function HomePage() {
           isActive ? "ring-2 ring-tv-blue z-10" : "ring-1 ring-tv-border/30"
         )}
       >
-        <PriceChart
-          key={`chart-${index}-${slot.symbol}-${slot.timeframe}`}
-          symbol={slot.symbol}
-          timeframe={slot.timeframe}
-          slotIndex={index}
-        />
+        {isActive && activeTab?.type === "heatmap" ? (
+          <Heatmap />
+        ) : slot.symbol === "NQ100" ? (
+          <div className="flex h-full items-center justify-center text-tv-text-dim text-xs">
+             Mapa de Calor (Haz clic para activar)
+          </div>
+        ) : (
+          <PriceChart
+            key={`chart-${index}-${slot.symbol}-${slot.timeframe}`}
+            symbol={slot.symbol}
+            timeframe={slot.timeframe}
+            slotIndex={index}
+          />
+        )}
       </div>
     );
   };

@@ -27,6 +27,8 @@ const TITLES: Record<IndicatorKey, string> = {
   vwap: "VWAP",
   volumeProfile: "Volume Profile",
   fvg: "Fair Value Gaps",
+  stoch: "Estocástico",
+  ictMacros: "ICT Macros",
 };
 
 export function IndicatorSettingsDialog() {
@@ -86,6 +88,12 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
     macdFast: config.macdFast,
     macdSlow: config.macdSlow,
     macdSignal: config.macdSignal,
+    stochK: config.stochK,
+    stochD: config.stochD,
+    stochKVisible: config.stochKVisible ?? true,
+    stochDVisible: config.stochDVisible ?? true,
+    stochKColor: config.stochKColor || "#2196f3",
+    stochDColor: config.stochDColor || "#ffa726",
   });
 
   useEffect(() => {
@@ -97,6 +105,12 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
       macdFast: config.macdFast,
       macdSlow: config.macdSlow,
       macdSignal: config.macdSignal,
+      stochK: config.stochK,
+      stochD: config.stochD,
+      stochKVisible: config.stochKVisible ?? true,
+      stochDVisible: config.stochDVisible ?? true,
+      stochKColor: config.stochKColor || "#2196f3",
+      stochDColor: config.stochDColor || "#ffa726",
     });
   }, [config, target]);
 
@@ -110,6 +124,15 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
         macdFast: clamp(draft.macdFast, 2, 100),
         macdSlow: clamp(draft.macdSlow, 2, 200),
         macdSignal: clamp(draft.macdSignal, 2, 100),
+      });
+    else if (target === "stoch")
+      onSave({
+        stochK: clamp(draft.stochK, 2, 100),
+        stochD: clamp(draft.stochD, 2, 100),
+        stochKVisible: draft.stochKVisible,
+        stochDVisible: draft.stochDVisible,
+        stochKColor: draft.stochKColor,
+        stochDColor: draft.stochDColor,
       });
     else if (target === "volume") onSave({});
   }
@@ -147,6 +170,67 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
             value={draft.macdSignal}
             onChange={(n) => setDraft((d) => ({ ...d, macdSignal: n }))}
           />
+        </div>
+      )}
+      {target === "stoch" && (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-4">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-tv-border bg-tv-bg focus:ring-tv-blue"
+                checked={draft.stochKVisible}
+                onChange={(e) => setDraft((d) => ({ ...d, stochKVisible: e.target.checked }))}
+              />
+              <Field
+                label="%K (Longitud)"
+                value={draft.stochK}
+                onChange={(n) => setDraft((d) => ({ ...d, stochK: n }))}
+              />
+            </div>
+            <div className="flex gap-2 pl-8">
+              {["#2196f3", "#ffa726", "#ef4444", "#22c55e", "#a855f7", "#ffffff", "#eab308"].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setDraft((d) => ({ ...d, stochKColor: c }))}
+                  className={`h-5 w-5 rounded-full border border-tv-border ${
+                    draft.stochKColor === c ? "ring-2 ring-white ring-offset-1 ring-offset-tv-bg" : ""
+                  }`}
+                  style={{ backgroundColor: c }}
+                  type="button"
+                />
+              ))}
+            </div>
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-4">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-tv-border bg-tv-bg focus:ring-tv-blue"
+                checked={draft.stochDVisible}
+                onChange={(e) => setDraft((d) => ({ ...d, stochDVisible: e.target.checked }))}
+              />
+              <Field
+                label="%D (Suavizado)"
+                value={draft.stochD}
+                onChange={(n) => setDraft((d) => ({ ...d, stochD: n }))}
+              />
+            </div>
+            <div className="flex gap-2 pl-8">
+              {["#2196f3", "#ffa726", "#ef4444", "#22c55e", "#a855f7", "#ffffff", "#eab308"].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setDraft((d) => ({ ...d, stochDColor: c }))}
+                  className={`h-5 w-5 rounded-full border border-tv-border ${
+                    draft.stochDColor === c ? "ring-2 ring-white ring-offset-1 ring-offset-tv-bg" : ""
+                  }`}
+                  style={{ backgroundColor: c }}
+                  type="button"
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
       {target === "volume" && (

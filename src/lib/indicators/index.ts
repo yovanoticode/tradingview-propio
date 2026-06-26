@@ -1,5 +1,12 @@
-import { SMA, EMA, RSI, MACD } from "technicalindicators";
+import { SMA, EMA, RSI, MACD, Stochastic } from "technicalindicators";
 import type { Candle } from "@/lib/binance/types";
+
+export interface StochPoint {
+  time: number;
+  k: number;
+  d: number;
+}
+
 
 export interface IndicatorPoint {
   time: number;
@@ -63,6 +70,34 @@ export function macd(
       macd: r.MACD,
       signal: r.signal,
       histogram: r.histogram,
+    });
+  }
+  return out;
+}
+
+/** Stochastic Oscillator — defaults 14 / 3 */
+export function stochastic(
+  candles: Candle[],
+  period = 14,
+  signalPeriod = 3,
+): StochPoint[] {
+  if (candles.length < period + signalPeriod) return [];
+  const result = Stochastic.calculate({
+    high: candles.map((c) => c.high),
+    low: candles.map((c) => c.low),
+    close: candles.map((c) => c.close),
+    period: period,
+    signalPeriod: signalPeriod,
+  });
+  const offset = candles.length - result.length;
+  const out: StochPoint[] = [];
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    if (r.k === undefined || r.d === undefined) continue;
+    out.push({
+      time: candles[i + offset].time,
+      k: r.k,
+      d: r.d,
     });
   }
   return out;

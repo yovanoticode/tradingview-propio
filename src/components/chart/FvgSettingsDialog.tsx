@@ -187,6 +187,11 @@ export function FvgSettingsDialog({ open, onClose }: Props) {
               onChange={(v) => patch({ showSwings: v })}
               label="Mostrar swing highs / lows"
             />
+            <Check
+              checked={cfg.showOTE}
+              onChange={(v) => patch({ showOTE: v })}
+              label="Mostrar OTE (Fibonacci)"
+            />
           </div>
 
           <div className="mt-2 space-y-0.5">
