@@ -1,6 +1,6 @@
 "use client";
 
-import { MousePointer2, Minus, Ruler, Trash2, Lock, Bell, TrendingUp, TrendingDown, Target } from "lucide-react";
+import { MousePointer2, Minus, Ruler, Trash2, Lock, Bell, TrendingUp, TrendingDown, Target, AlignJustify, Eraser } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChartStore, type DrawingTool } from "@/lib/store/chart-store";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ interface ToolDef {
 
 const TOOLS: ToolDef[] = [
   { key: "cursor", icon: MousePointer2, label: "Cursor", hint: "Modo navegación" },
+  { key: "eraser", icon: Eraser, label: "Borrador", hint: "Haz clic sobre cualquier dibujo para eliminarlo" },
   {
     key: "hline",
     icon: Minus,
@@ -32,6 +33,12 @@ const TOOLS: ToolDef[] = [
     label: "Alerta de precio",
     hint: "Click en el chart — beep cuando el precio cruce el nivel",
   },
+  {
+    key: "fibonacci",
+    icon: AlignJustify,
+    label: "Retroceso de Fibonacci",
+    hint: "Click en dos puntos (inicio y fin) para dibujar los niveles",
+  },
 ];
 
 const PREVISION_TOOLS: ToolDef[] = [
@@ -42,7 +49,6 @@ const PREVISION_TOOLS: ToolDef[] = [
 
 const LOCKED = [
   { label: "Línea de tendencia" },
-  { label: "Fibonacci" },
   { label: "Texto" },
 ];
 
@@ -51,6 +57,7 @@ export function LeftSidebar() {
   const setTool = useChartStore((s) => s.setTool);
   const clearPriceLines = useChartStore((s) => s.clearPriceLines);
   const clearPositionBoxes = useChartStore((s) => s.clearPositionBoxes);
+  const clearFibonaccis = useChartStore((s) => s.clearFibonaccis);
   const symbol = useChartStore((s) => s.symbol);
 
   return (
@@ -84,7 +91,7 @@ export function LeftSidebar() {
 
       <Tooltip>
         <TooltipTrigger
-          onClick={() => { clearPriceLines(symbol); clearPositionBoxes(symbol); }}
+          onClick={() => { clearPriceLines(symbol); clearPositionBoxes(symbol); clearFibonaccis(symbol); }}
           aria-label="Borrar dibujos"
           className="flex h-8 w-8 items-center justify-center rounded text-tv-text-muted hover:bg-tv-panel-hover hover:text-tv-red"
         >

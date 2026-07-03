@@ -19,7 +19,7 @@ export type IndicatorKey =
   | "stoch"
   | "ictMacros";
 
-export type DrawingTool = "cursor" | "hline" | "measure" | "eraser" | "alert" | "long_position" | "short_position" | "position_forecast";
+export type DrawingTool = "cursor" | "hline" | "measure" | "eraser" | "alert" | "long_position" | "short_position" | "position_forecast" | "fibonacci";
 
 export type LayoutMode =
   | "single"
@@ -54,6 +54,15 @@ export interface PriceAlert {
   price: number;
   triggered: boolean;
   createdPrice: number; // reference price at creation (to detect cross direction)
+}
+
+export interface FibonacciBox {
+  id: string;
+  symbol: string;
+  timeA: number;
+  priceA: number;
+  timeB: number;
+  priceB: number;
 }
 
 export interface IndicatorConfig {
@@ -419,6 +428,10 @@ interface ChartState {
   addPositionBox: (entry: number, stop: number, target: number, symbol: string, type: "long" | "short" | "forecast") => void;
   removePositionBox: (id: string) => void;
   clearPositionBoxes: (symbol?: string) => void;
+  fibonaccis: FibonacciBox[];
+  addFibonacci: (fibo: Omit<FibonacciBox, "id">) => void;
+  removeFibonacci: (id: string) => void;
+  clearFibonaccis: (symbol?: string) => void;
   symbolDialogOpen: boolean;
   settingsTarget: IndicatorKey | null;
 
@@ -438,6 +451,7 @@ interface ChartState {
   removeFromWatchlist: (s: string) => void;
   setTool: (t: DrawingTool) => void;
   addPriceLine: (price: number, symbol: string) => void;
+  removePriceLine: (id: string) => void;
   clearPriceLines: (symbol?: string) => void;
   addAlert: (price: number, symbol: string, currentPrice: number) => void;
   removeAlert: (id: string) => void;
@@ -555,6 +569,13 @@ export const useChartStore = create<ChartState>()(
         set((s) => ({ positionBoxes: s.positionBoxes.filter((b) => b.id !== id) })),
       clearPositionBoxes: (symbol) =>
         set((s) => ({ positionBoxes: symbol ? s.positionBoxes.filter((b) => b.symbol !== symbol) : [] })),
+      fibonaccis: [],
+      addFibonacci: (fibo) =>
+        set((s) => ({ fibonaccis: [...s.fibonaccis, { ...fibo, id: newId() }] })),
+      removeFibonacci: (id) =>
+        set((s) => ({ fibonaccis: s.fibonaccis.filter((f) => f.id !== id) })),
+      clearFibonaccis: (symbol) =>
+        set((s) => ({ fibonaccis: symbol ? s.fibonaccis.filter((f) => f.symbol !== symbol) : [] })),
       symbolDialogOpen: false,
       settingsTarget: null,
 
@@ -707,8 +728,12 @@ export const useChartStore = create<ChartState>()(
         set((state) => ({
           priceLines: [
             ...state.priceLines,
-            { id: newId(), symbol, price },
+            { id: newId(), price, symbol },
           ],
+        })),
+      removePriceLine: (id) =>
+        set((state) => ({
+          priceLines: state.priceLines.filter((p) => p.id !== id),
         })),
       clearPriceLines: (symbol) =>
         set((state) => ({

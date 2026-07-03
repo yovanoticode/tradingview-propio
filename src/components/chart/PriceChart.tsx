@@ -62,6 +62,7 @@ import {
 import { formatPrice, formatVolume } from "@/lib/format";
 import { IndicatorPill } from "./IndicatorPill";
 import { MeasureOverlay } from "./MeasureOverlay";
+import { FibonacciOverlay } from "./FibonacciOverlay";
 import { PositionOverlay } from "./PositionOverlay";
 
 interface MeasurePoint {
@@ -131,6 +132,7 @@ interface LastValues {
 interface PaneOffset {
   top: number;
   height: number;
+  width: number;
 }
 
 export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
@@ -208,8 +210,12 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   const toggleHidden = useChartStore((s) => s.toggleHidden);
   const setSettingsTarget = useChartStore((s) => s.setSettingsTarget);
   const positionBoxes = useChartStore((s) => s.positionBoxes);
+  const fibonaccis = useChartStore((s) => s.fibonaccis);
+  const addFibonacci = useChartStore((s) => s.addFibonacci);
+  const removeFibonacci = useChartStore((s) => s.removeFibonacci);
   const addPositionBox = useChartStore((s) => s.addPositionBox);
   const removePositionBox = useChartStore((s) => s.removePositionBox);
+  const removePriceLine = useChartStore((s) => s.removePriceLine);
 
   // Refs to avoid recreating subscribeClick on every tool change
   const toolRef = useRef(tool);
@@ -224,11 +230,26 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   triggerAlertRef.current = triggerAlert;
   const lastPriceForAlertsRef = useRef<number | null>(null);
   const symbolRef = useRef(symbol);
-  symbolRef.current = symbol;
   const configRef = useRef(config);
-  configRef.current = config;
   const ictConfigRef = useRef(ictConfig);
+  const priceLinesRef = useRef(priceLines);
+  const positionBoxesRef = useRef(positionBoxes);
+  const fibonaccisRef = useRef(fibonaccis);
+  const removePriceLineRef = useRef(removePriceLine);
+  const removeAlertRef = useRef(removeAlert);
+  const removePositionBoxRef = useRef(removePositionBox);
+  const removeFibonacciRef = useRef(removeFibonacci);
+
+  symbolRef.current = symbol;
+  configRef.current = config;
   ictConfigRef.current = ictConfig;
+  priceLinesRef.current = priceLines;
+  positionBoxesRef.current = positionBoxes;
+  fibonaccisRef.current = fibonaccis;
+  removePriceLineRef.current = removePriceLine;
+  removeAlertRef.current = removeAlert;
+  removePositionBoxRef.current = removePositionBox;
+  removeFibonacciRef.current = removeFibonacci;
 
   const orbHighLineRef = useRef<IPriceLine | null>(null);
   const orbLowLineRef = useRef<IPriceLine | null>(null);
@@ -276,14 +297,26 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   const addPositionBoxRef = useRef(addPositionBox);
   addPositionBoxRef.current = addPositionBox;
 
+  interface FibonacciDraft {
+    phase: "idle" | "placing";
+    a: { time: number; price: number };
+    b: { time: number; price: number };
+  }
+  const [fiboDraft, setFiboDraft] = useState<FibonacciDraft>({ phase: "idle", a: { time: 0, price: 0 }, b: { time: 0, price: 0 } });
+  const fiboDraftRef = useRef(fiboDraft);
+  fiboDraftRef.current = fiboDraft;
+  const addFibonacciRef = useRef(addFibonacci);
+  addFibonacciRef.current = addFibonacci;
+
   // Helper — compute pane top offsets from chart layout
   function recomputePaneOffsets() {
-    if (!chartRef.current) return;
+    if (!chartRef.current || !containerRef.current) return;
     const panes = chartRef.current.panes();
+    const containerW = containerRef.current.clientWidth;
     let top = 0;
     const offsets: PaneOffset[] = panes.map((p) => {
       const h = p.getHeight();
-      const o = { top, height: h };
+      const o = { top, height: h, width: containerW };
       top += h;
       return o;
     });
@@ -371,6 +404,74 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       const price = candleSeriesRef.current.coordinateToPrice(param.point.y);
       if (price === null || !isFinite(price)) return;
 
+      if (toolRef.current === "eraser") {
+        const clickY = param.point.y;
+        let removed = false;
+
+        // 1. priceLines
+        for (const pl of priceLinesRef.current) {
+          if (pl.symbol !== symbolRef.current) continue;
+          const y = candleSeriesRef.current.priceToCoordinate(pl.price);
+          if (y !== null && Math.abs(y - clickY) < 15) {
+            removePriceLineRef.current(pl.id);
+            removed = true;
+            break;
+          }
+        }
+        if (removed) return;
+
+        // 2. alerts
+        for (const al of alertsRef.current) {
+          if (al.symbol !== symbolRef.current) continue;
+          const y = candleSeriesRef.current.priceToCoordinate(al.price);
+          if (y !== null && Math.abs(y - clickY) < 15) {
+            removeAlertRef.current(al.id);
+            removed = true;
+            break;
+          }
+        }
+        if (removed) return;
+
+        // 3. fibonaccis
+        for (const fb of fibonaccisRef.current) {
+          if (fb.symbol !== symbolRef.current) continue;
+          const yA = candleSeriesRef.current.priceToCoordinate(fb.priceA);
+          const yB = candleSeriesRef.current.priceToCoordinate(fb.priceB);
+          if (yA !== null && yB !== null) {
+            const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+            for (const lvl of levels) {
+              const y = yB + (yA - yB) * lvl;
+              if (Math.abs(y - clickY) < 15) {
+                removeFibonacciRef.current(fb.id);
+                removed = true;
+                break;
+              }
+            }
+            if (removed) break;
+          }
+        }
+        if (removed) return;
+
+        // 4. positionBoxes
+        for (const pb of positionBoxesRef.current) {
+          if (pb.symbol !== symbolRef.current) continue;
+          const yE = candleSeriesRef.current.priceToCoordinate(pb.entry);
+          const yS = candleSeriesRef.current.priceToCoordinate(pb.stop);
+          const yT = candleSeriesRef.current.priceToCoordinate(pb.target);
+          if (yE !== null && yS !== null && yT !== null) {
+            const minY = Math.min(yE, yS, yT);
+            const maxY = Math.max(yE, yS, yT);
+            if (clickY >= minY - 5 && clickY <= maxY + 5) {
+              removePositionBoxRef.current(pb.id);
+              removed = true;
+              break;
+            }
+          }
+        }
+        if (removed) return;
+        return;
+      }
+
       if (toolRef.current === "hline") {
         addPriceLineRef.current(price, symbolRef.current);
         return;
@@ -392,6 +493,24 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           setMeasure({ phase: "done", a: current.a, b: { time, price } });
         } else {
           setMeasure({ phase: "placing", a: { time, price }, b: { time, price } });
+        }
+      }
+
+      if (toolRef.current === "fibonacci") {
+        if (!param.time) return;
+        const time = Number(param.time);
+        const current = fiboDraftRef.current;
+        if (current.phase === "idle") {
+          setFiboDraft({ phase: "placing", a: { time, price }, b: { time, price } });
+        } else if (current.phase === "placing") {
+          addFibonacciRef.current({
+            symbol: symbolRef.current,
+            timeA: current.a.time,
+            priceA: current.a.price,
+            timeB: time,
+            priceB: price,
+          });
+          setFiboDraft({ phase: "idle", a: { time: 0, price: 0 }, b: { time: 0, price: 0 } });
         }
       }
 
@@ -428,6 +547,22 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
         if (price !== null && isFinite(price)) {
           const time = Number(param.time);
           setMeasure((prev) =>
+            prev.phase === "placing" ? { ...prev, b: { time, price } } : prev,
+          );
+        }
+      }
+
+      if (
+        toolRef.current === "fibonacci" &&
+        fiboDraftRef.current.phase === "placing" &&
+        param.point &&
+        param.time &&
+        candleSeriesRef.current
+      ) {
+        const price = candleSeriesRef.current.coordinateToPrice(param.point.y);
+        if (price !== null && isFinite(price)) {
+          const time = Number(param.time);
+          setFiboDraft((prev) =>
             prev.phase === "placing" ? { ...prev, b: { time, price } } : prev,
           );
         }
@@ -1006,9 +1141,15 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.style.cursor =
-        tool === "hline" || tool === "measure" ? "crosshair" : "";
+        tool === "hline" || tool === "measure" || tool === "fibonacci" ? "crosshair" : "";
     }
     if (tool !== "measure") setMeasure(INITIAL_MEASURE);
+    if (tool !== "long_position" && tool !== "short_position" && tool !== "position_forecast") {
+      setPositionDraft({ phase: "idle", type: "long", entry: null, mouse: null });
+    }
+    if (tool !== "fibonacci") {
+      setFiboDraft({ phase: "idle", a: { time: 0, price: 0 }, b: { time: 0, price: 0 } });
+    }
   }, [tool]);
 
   function updateEMAs() {
@@ -1518,11 +1659,6 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   const greenOrRed = (n: number) =>
     n >= 0 ? "text-tv-green" : "text-tv-red";
 
-  // Helpers for pill rendering
-  const isShown = (key: IndicatorKey) =>
-    indicators[key] && (key === "volume" || true); // always renderable if enabled
-  void isShown;
-
   // Determine which pane each indicator lives in (based on current layout)
   const rsiPaneIdx = 1;
   const macdPaneIdx = indicators.rsi ? 2 : 1;
@@ -1576,6 +1712,64 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     }
   }
 
+  // --- Render Fibonacci Draft ---
+  let fiboDraftRender = null;
+  if (
+    fiboDraft.phase === "placing" &&
+    candleSeriesRef.current &&
+    paneOffsets.length > 0 &&
+    candlesRef.current.length > 0
+  ) {
+    const aX = chartRef.current!.timeScale().timeToCoordinate(fiboDraft.a.time as any);
+    const aY = candleSeriesRef.current.priceToCoordinate(fiboDraft.a.price);
+    const bX = chartRef.current!.timeScale().timeToCoordinate(fiboDraft.b.time as any);
+    const bY = candleSeriesRef.current.priceToCoordinate(fiboDraft.b.price);
+
+    if (aX !== null && bX !== null && aY !== null && bY !== null) {
+      fiboDraftRender = (
+        <FibonacciOverlay
+          aX={aX}
+          aY={aY}
+          bX={bX}
+          bY={bY}
+          priceA={fiboDraft.a.price}
+          priceB={fiboDraft.b.price}
+          paneWidth={paneOffsets[0].width}
+          isPreview={true}
+        />
+      );
+    }
+  }
+
+  // --- Render Persisted Fibonaccis ---
+
+  const fiboRenders = fibonaccis
+    .filter((f) => f.symbol === symbol)
+    .map((f) => {
+      if (!candleSeriesRef.current || !chartRef.current || paneOffsets.length === 0) return null;
+      const aX = chartRef.current.timeScale().timeToCoordinate(f.timeA as any);
+      const aY = candleSeriesRef.current.priceToCoordinate(f.priceA);
+      const bX = chartRef.current.timeScale().timeToCoordinate(f.timeB as any);
+      const bY = candleSeriesRef.current.priceToCoordinate(f.priceB);
+
+      if (aX === null || aY === null || bX === null || bY === null) return null;
+
+      return (
+        <FibonacciOverlay
+          key={f.id}
+          aX={aX}
+          aY={aY}
+          bX={bX}
+          bY={bY}
+          priceA={f.priceA}
+          priceB={f.priceB}
+          paneWidth={paneOffsets[0].width}
+          isPreview={false}
+          onRemove={() => removeFibonacci(f.id)}
+        />
+      );
+    });
+
   let measureRender: React.ReactNode = null;
   if (
     measure.a &&
@@ -1620,7 +1814,6 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       );
     }
   }
-  void renderTick;
 
   const handleZoom = (direction: 1 | -1) => {
     if (!chartRef.current) return;
@@ -1758,6 +1951,8 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       )}
       {positionRender}
       {measureRender}
+      {fiboDraftRender}
+      {fiboRenders}
 
       {/* Top-left of main pane: symbol info + OHLC + Volume pill + EMA pills */}
       <div
