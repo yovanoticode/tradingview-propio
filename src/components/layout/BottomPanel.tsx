@@ -6,6 +6,7 @@ import { fetchTicker24h } from "@/lib/yahoo/rest";
 import type { Ticker24h } from "@/lib/yahoo/types";
 import { formatPrice, formatPct, formatVolume } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TimezoneSelector } from "@/components/chart/TimezoneSelector";
 
 export function BottomPanel() {
   const symbol = useChartStore((s) => s.symbol);
@@ -61,12 +62,50 @@ export function BottomPanel() {
         label="24h Vol (USDT)"
         value={t ? formatVolume(t.quoteVolume) : "—"}
       />
-      <div className="ml-auto flex items-center gap-2 text-[10px] text-tv-text-dim">
-        <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-tv-green" />
-        <span>Yahoo Finance · 15min delay</span>
+      <div className="ml-auto flex items-center gap-3 text-xs text-tv-text-dim px-3">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-tv-green" />
+          <span>Datos en vivo</span>
+        </div>
+        <Clock />
+        <TimezoneSelector />
       </div>
     </div>
   );
+}
+
+function Clock() {
+  const [time, setTime] = useState<Date | null>(null);
+  const chartTimezone = useChartStore((s) => s.chartTimezone);
+
+  useEffect(() => {
+    setTime(new Date());
+    const id = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!time) return null;
+
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: chartTimezone,
+      timeZoneName: "shortOffset",
+    });
+
+    const formatted = formatter.format(time).replace("GMT", "UTC");
+
+    return (
+      <div className="font-medium tabular-nums text-tv-text">
+        {formatted}
+      </div>
+    );
+  } catch (e) {
+    return <div className="font-medium tabular-nums text-tv-text">{time.toLocaleTimeString()}</div>;
+  }
 }
 
 function Stat({

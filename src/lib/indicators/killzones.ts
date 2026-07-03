@@ -72,7 +72,13 @@ export function calculateKillzones(candles: Candle[], config: IctConfig): KZBox[
 
     for (const sess of activeSessions) {
       if (inSession(etMin, sess.startH, sess.startM, sess.endH, sess.endM)) {
-        const key = `${sess.name}__${etDate}`;
+        let effectiveDate = etDate;
+        const start = sess.startH * 60 + sess.startM;
+        const end = sess.endH * 60 + sess.endM;
+        if (start > end && etMin < end) {
+          effectiveDate = getETDateKey(candle.time - 86400);
+        }
+        const key = `${sess.name}__${effectiveDate}`;
         if (!map.has(key)) {
           map.set(key, {
             candles: [],

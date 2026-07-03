@@ -38,12 +38,10 @@ const PRESET_COLORS = [
 function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <div 
-          className="h-6 w-6 cursor-pointer rounded border border-tv-border flex-shrink-0" 
-          style={{ backgroundColor: value }}
-        />
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        className="h-6 w-6 cursor-pointer rounded border border-tv-border flex-shrink-0" 
+        style={{ backgroundColor: value }}
+      />
       <DropdownMenuContent className="w-48 bg-tv-bg border-tv-border p-2">
         <div className="flex flex-wrap gap-1.5 mb-2">
           {PRESET_COLORS.map((c) => (

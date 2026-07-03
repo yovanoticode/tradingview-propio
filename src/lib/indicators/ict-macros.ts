@@ -52,7 +52,13 @@ export function calculateMacros(candles: Candle[], configs: IctMacroConfig[]): M
 
     for (const cfg of activeConfigs) {
       if (inSession(etMin, cfg.startH, cfg.startM, cfg.endH, cfg.endM)) {
-        const key = `${cfg.name}__${etDate}`;
+        let effectiveDate = etDate;
+        const start = cfg.startH * 60 + cfg.startM;
+        const end = cfg.endH * 60 + cfg.endM;
+        if (start > end && etMin < end) {
+          effectiveDate = getETDateKey(candle.time - 86400);
+        }
+        const key = `${cfg.name}__${effectiveDate}`;
         if (!map.has(key)) {
           map.set(key, { candles: [], config: cfg });
         }
