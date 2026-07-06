@@ -187,7 +187,22 @@ export function calculateDWM(candles: Candle[], config: IctConfig): HorizLevel[]
       }
 
       if (showPrevHL && i > 0) {
-        const prevGroup = groups[i - 1];
+        let prevGroup: PeriodGroup | undefined;
+        
+        for (let j = i - 1; j >= 0; j--) {
+          const cand = groups[j];
+          if (prefix === "D") {
+            // Check day of week using the key (YYYY-MM-DD)
+            const d = new Date(cand.key + "T12:00:00Z");
+            const dow = d.getDay();
+            if (dow === 0 || dow === 6) {
+              continue; // Always skip weekends for Previous Daily levels
+            }
+          }
+          prevGroup = cand;
+          break;
+        }
+
         if (prevGroup && prevGroup.candles.length > 0) {
           const prevHigh = Math.max(...prevGroup.candles.map((c) => c.high));
           const prevLow = Math.min(...prevGroup.candles.map((c) => c.low));
