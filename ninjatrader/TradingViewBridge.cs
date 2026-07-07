@@ -46,6 +46,11 @@ namespace NinjaTrader.NinjaScript.Strategies
             }
             else if (State == State.DataLoaded)
             {
+                if (Account != null)
+                {
+                    Account.PositionUpdate += OnAccountPositionUpdate;
+                }
+                
                 lock (_serverLock)
                 {
                     _instances[Instrument.FullName.ToUpper()] = this;
@@ -61,6 +66,11 @@ namespace NinjaTrader.NinjaScript.Strategies
             }
             else if (State == State.Terminated)
             {
+                if (Account != null)
+                {
+                    Account.PositionUpdate -= OnAccountPositionUpdate;
+                }
+                
                 lock (_serverLock)
                 {
                     string key = Instrument.FullName.ToUpper();
@@ -459,6 +469,39 @@ namespace NinjaTrader.NinjaScript.Strategies
             lock (_serverLock) _clients.Add(ws);
             LogToFile(string.Format("Cliente conectado al WS compartido. Total: {0}", _clients.Count));
 
+            // Send current positions to the newly connected client
+            lock (_serverLock)
+            {
+                foreach (var kv in _instances)
+                {
+                    var inst = kv.Value;
+                    if (inst != null && inst.Account != null)
+                    {
+                        double avgPrice = 0;
+                        int netPos = 0;
+                        foreach (var pos in inst.Account.Positions)
+                        {
+                            if (pos.Instrument == inst.Instrument)
+                            {
+                                netPos += (int)(pos.MarketPosition == MarketPosition.Long ? pos.Quantity : -pos.Quantity);
+                                avgPrice = pos.AveragePrice;
+                            }
+                        }
+                        
+                        string msg = string.Format(CultureInfo.InvariantCulture,
+                            "{{\"type\":\"position\",\"symbol\":\"{0}\",\"position\":{1},\"averagePrice\":{2}}}",
+                            inst.Instrument.FullName, netPos, avgPrice);
+                        
+                        try 
+                        {
+                            var bytes = Encoding.UTF8.GetBytes(msg);
+                            ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None).Wait();
+                        } 
+                        catch { }
+                    }
+                }
+            }
+
             var buf = new byte[256];
             try
             {
@@ -478,7 +521,20 @@ namespace NinjaTrader.NinjaScript.Strategies
             }
         }
 
-        // ── Bar + tick broadcast ────────────────────────────────────────
+        // ── Bar + tick + position broadcast ───────────────────────────────
+
+        private void OnAccountPositionUpdate(object sender, PositionEventArgs e)
+        {
+            if (e.Position.Instrument != Instrument) return;
+            
+            int netPos = e.MarketPosition == MarketPosition.Long ? e.Quantity : (e.MarketPosition == MarketPosition.Short ? -e.Quantity : 0);
+            
+            string msg = string.Format(CultureInfo.InvariantCulture,
+                "{{\"type\":\"position\",\"symbol\":\"{0}\",\"position\":{1},\"averagePrice\":{2}}}",
+                Instrument.FullName, netPos, e.AveragePrice);
+                
+            Broadcast(msg);
+        }
 
         protected override void OnBarUpdate()
         {

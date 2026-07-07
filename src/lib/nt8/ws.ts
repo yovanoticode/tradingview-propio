@@ -17,8 +17,16 @@ export interface BarMessage {
   volume: number;
 }
 
+export interface PositionMessage {
+  type: "position";
+  symbol?: string;
+  position: number;
+  averagePrice: number;
+}
+
 export type TickCallback = (msg: TickMessage) => void;
 export type BarCallback = (msg: BarMessage) => void;
+export type PositionCallback = (msg: PositionMessage) => void;
 
 const NT8_WS_URL = "ws://localhost:4001";
 let cachedCorr: number | null = null;
@@ -48,6 +56,7 @@ export class NT8WSClient {
   private ws: WebSocket | null = null;
   private tickCbs = new Set<TickCallback>();
   private barCbs = new Set<BarCallback>();
+  private posCbs = new Set<PositionCallback>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setTimeout> | null = null;
   private _connected = false;
@@ -112,6 +121,10 @@ export class NT8WSClient {
               this.barCbs.forEach((cb) => cb({ ...msg, time, open, high, low, close, volume }));
             }
           }
+        } else if (msg.type === "position") {
+          const pos = msg.position ?? 0;
+          const avgPrice = msg.averagePrice ?? 0;
+          this.posCbs.forEach((cb) => cb({ ...msg, position: pos, averagePrice: avgPrice }));
         }
       } catch { /* ignore malformed */ }
     };
@@ -140,6 +153,11 @@ export class NT8WSClient {
   subscribeBar(cb: BarCallback): () => void {
     this.barCbs.add(cb);
     return () => this.barCbs.delete(cb);
+  }
+
+  subscribePosition(cb: PositionCallback): () => void {
+    this.posCbs.add(cb);
+    return () => this.posCbs.delete(cb);
   }
 
   disconnect() {

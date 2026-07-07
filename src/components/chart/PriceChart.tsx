@@ -193,6 +193,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   })();
   const indicators = useChartStore((s) => s.indicators);
   const hidden = useChartStore((s) => s.hidden);
+  const nt8Pos = useChartStore((s) => s.nt8Position);
+
+  // Sync state between config / items / drawings
   const config = useChartStore((s) => s.config);
   const tool = useChartStore((s) => s.tool);
   const priceLines = useChartStore((s) => s.priceLines);
@@ -1613,7 +1616,18 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
           // bar  = OHLCV completo del bar 1m (necesario para H/L exactos)
           const u1 = nt8ws.subscribeTick(applyLivePrice);
           const u2 = nt8ws.subscribeBar(applyFullBar);
-          unsub = () => { u1(); u2(); };
+          const u3 = nt8ws.subscribePosition((msg) => {
+            const symPrefix = symbol.split(/[=\s-]/)[0].toUpperCase();
+            const nt8Prefix = msg.symbol?.split(/[\s-]/)[0].toUpperCase() ?? "";
+            if (symPrefix === nt8Prefix || msg.symbol === symbol) {
+              useChartStore.getState().setNT8Position(msg.position !== 0 ? {
+                qty: msg.position,
+                averagePrice: msg.averagePrice,
+                symbol: msg.symbol || ""
+              } : null);
+            }
+          });
+          unsub = () => { u1(); u2(); u3(); };
         } else {
           // Fallback to Yahoo Finance Poller
           const poller = getYahooPoller();
@@ -1953,6 +1967,36 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       {measureRender}
       {fiboDraftRender}
       {fiboRenders}
+
+      {/* NT8 Real-time Position Render */}
+      {useNT8 && nt8Pos && nt8Pos.qty !== 0 && candleSeriesRef.current && paneOffsets[0] && (
+        <div className="pointer-events-none absolute left-0 top-0 h-full w-full overflow-hidden" style={{ zIndex: 15 }}>
+          {(() => {
+            const y = candleSeriesRef.current.priceToCoordinate(nt8Pos.averagePrice);
+            if (y === null) return null;
+            const isLong = nt8Pos.qty > 0;
+            const color = isLong ? TV_COLORS.green : TV_COLORS.red;
+            const label = `${isLong ? "Long" : "Short"} ${Math.abs(nt8Pos.qty)} @ ${nt8Pos.averagePrice}`;
+            return (
+              <>
+                <svg width={containerW} height={paneOffsets[0].height}>
+                  <line x1={0} y1={y} x2={containerW} y2={y} stroke={color} strokeWidth={2} strokeDasharray="4,4" />
+                </svg>
+                <div
+                  className="absolute rounded px-2 py-0.5 text-[11px] font-bold tabular-nums text-white opacity-90 backdrop-blur"
+                  style={{
+                    top: y - 10,
+                    left: Math.max(10, containerW - 150),
+                    backgroundColor: color,
+                  }}
+                >
+                  {label}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Top-left of main pane: symbol info + OHLC + Volume pill + EMA pills */}
       <div

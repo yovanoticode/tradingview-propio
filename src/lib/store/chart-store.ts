@@ -408,9 +408,11 @@ interface ChartState {
   nt8Instruments: string[];
   nt8WasConnected: boolean; // persisted — triggers auto-reconnect on load
   nt8OffsetHours: number;
+  nt8Position: { qty: number; averagePrice: number; symbol: string } | null;
   setNT8: (connected: boolean, instrument?: string | null) => void;
   setNT8Instruments: (instruments: string[]) => void;
   setNt8OffsetHours: (h: number) => void;
+  setNT8Position: (position: { qty: number; averagePrice: number; symbol: string } | null) => void;
 
   // Tradovate connection (ephemeral / persisted token)
   tradovateToken: string | null;
@@ -537,6 +539,7 @@ export const useChartStore = create<ChartState>()(
       nt8Instruments: [],
       nt8WasConnected: false,
       nt8OffsetHours: -1, // Default to -1 as requested/identified
+      nt8Position: null,
       setNT8: (connected, instrument = null) =>
         set((s) => ({
           nt8Connected: connected,
@@ -546,6 +549,7 @@ export const useChartStore = create<ChartState>()(
         })),
       setNT8Instruments: (nt8Instruments) => set({ nt8Instruments }),
       setNt8OffsetHours: (h) => set({ nt8OffsetHours: h }),
+      setNT8Position: (pos) => set({ nt8Position: pos }),
 
       tradovateToken: null,
       tradovateEnv: "demo",
