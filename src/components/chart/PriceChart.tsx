@@ -1003,7 +1003,8 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     if (c.length === 0 || !indicators.ict) return;
     setKzBoxes(calculateKillzones(c, ictConfig));
     setAmdDays(calculateAMD(c, ictConfig.showAMD));
-    setDailyBias(calculateDailyBias(c));
+    const cmeShift = useChartStore.getState().ictConfig.dwm.cmeShift;
+    setDailyBias(calculateDailyBias(c, cmeShift));
     setOpLevels(calculateOpeningPrices(c, ictConfig));
     setDwmLevels(calculateDWM(c, ictConfig));
     setTsList(calculateTimestamps(c, ictConfig));
@@ -1355,7 +1356,8 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
                 setOrbResult(calculateORB(bars));
                 setKzBoxes(calculateKillzones(bars, ictConfigRef.current));
                 setAmdDays(calculateAMD(bars, ictConfigRef.current.showAMD));
-                setDailyBias(calculateDailyBias(bars));
+                const cmeShift = useChartStore.getState().ictConfig.dwm.cmeShift;
+                setDailyBias(calculateDailyBias(bars, cmeShift));
                 setOpLevels(calculateOpeningPrices(bars, ictConfigRef.current));
                 setDwmLevels(calculateDWM(bars, ictConfigRef.current));
                 setTsList(calculateTimestamps(bars, ictConfigRef.current));
@@ -1429,7 +1431,8 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
         setOrbResult(calculateORB(klines));
         setKzBoxes(calculateKillzones(klines, ictConfigRef.current));
         setAmdDays(calculateAMD(klines, ictConfigRef.current.showAMD));
-        setDailyBias(calculateDailyBias(klines));
+        const cmeShift = useChartStore.getState().ictConfig.dwm.cmeShift;
+        setDailyBias(calculateDailyBias(klines, cmeShift));
         setOpLevels(calculateOpeningPrices(klines, ictConfigRef.current));
         setDwmLevels(calculateDWM(klines, ictConfigRef.current));
         setTsList(calculateTimestamps(klines, ictConfigRef.current));
@@ -1579,7 +1582,8 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
               setObBoxes(cfg.showBreaker ? obs : obs.filter((ob) => !ob.isBreaker));
             }
             setMacroBoxes(calculateMacros(arr, macrosConfigRef.current));
-            setDailyBias(calculateDailyBias(arr));
+            const cmeShift = useChartStore.getState().ictConfig.dwm.cmeShift;
+            setDailyBias(calculateDailyBias(arr, cmeShift));
           }
           const prev = arr[arr.length - 2];
           setLastPrice({
@@ -1979,14 +1983,14 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
             const label = `${isLong ? "Long" : "Short"} ${Math.abs(nt8Pos.qty)} @ ${nt8Pos.averagePrice}`;
             return (
               <>
-                <svg width={containerW} height={paneOffsets[0].height}>
-                  <line x1={0} y1={y} x2={containerW} y2={y} stroke={color} strokeWidth={2} strokeDasharray="4,4" />
+                <svg width={containerRef.current?.clientWidth || 0} height={paneOffsets[0].height}>
+                  <line x1={0} y1={y} x2={containerRef.current?.clientWidth || 0} y2={y} stroke={color} strokeWidth={2} strokeDasharray="4,4" />
                 </svg>
                 <div
                   className="absolute rounded px-2 py-0.5 text-[11px] font-bold tabular-nums text-white opacity-90 backdrop-blur"
                   style={{
                     top: y - 10,
-                    left: Math.max(10, containerW - 150),
+                    left: Math.max(10, (containerRef.current?.clientWidth || 0) - 150),
                     backgroundColor: color,
                   }}
                 >
@@ -2128,11 +2132,11 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
                 onSettings={() => setIctSettingsOpen(true)}
                 onRemove={() => removeIndicator("ict")}
               />
-              {!hidden.ict && dailyBias !== "Neutral" && (
+              {!hidden.ict && (
                 <IndicatorPill
                   name="Daily Bias"
-                  value={dailyBias === "Bullish" ? "Alcista 🟢" : "Bajista 🔴"}
-                  color={dailyBias === "Bullish" ? TV_COLORS.green : TV_COLORS.red}
+                  value={dailyBias === "Bullish" ? "Alcista 🟢" : dailyBias === "Bearish" ? "Bajista 🔴" : "Neutral ⚪"}
+                  color={dailyBias === "Bullish" ? TV_COLORS.green : dailyBias === "Bearish" ? TV_COLORS.red : TV_COLORS.text}
                 />
               )}
             </>

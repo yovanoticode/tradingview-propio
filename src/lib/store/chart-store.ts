@@ -114,6 +114,7 @@ export interface TimestampRow {
   timeH: number;
   timeM: number;
   color: string;
+  label?: string;
 }
 
 export interface DWMConfig {
