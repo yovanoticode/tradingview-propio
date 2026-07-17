@@ -772,7 +772,7 @@ export const useChartStore = create<ChartState>()(
     }),
     {
       name: "tv-futures-chart-state",
-      version: 5,
+      version: 6,
       migrate: (persisted: unknown, version: number) => {
         const s = persisted as Record<string, any>;
         if (version === 0) {
@@ -815,6 +815,13 @@ export const useChartStore = create<ChartState>()(
             ...t,
             indicators: { ...DEFAULT_INDICATORS, ...t.indicators },
             hidden: { ...DEFAULT_HIDDEN, ...t.hidden },
+          }));
+        }
+        if (version < 6) {
+          s.config = { ...DEFAULT_CONFIG, ...(s.config || {}) };
+          s.tabs = (s.tabs ?? []).map((t: any) => ({
+            ...t,
+            config: { ...DEFAULT_CONFIG, ...(t.config || {}) },
           }));
         }
         return s;
