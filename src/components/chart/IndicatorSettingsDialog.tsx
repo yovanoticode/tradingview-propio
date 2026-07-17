@@ -16,9 +16,11 @@ import {
 } from "@/lib/store/chart-store";
 
 const TITLES: Record<IndicatorKey, string> = {
-  ema20: "EMA — Slot 1",
-  ema50: "EMA — Slot 2",
-  ema200: "EMA — Slot 3",
+  ema9: "EMA — Slot 1",
+  ema20: "EMA — Slot 2",
+  ema21: "EMA — Slot 3",
+  ema50: "EMA — Slot 4",
+  ema200: "EMA — Slot 5",
   rsi: "RSI",
   macd: "MACD",
   volume: "Volumen",
@@ -81,7 +83,9 @@ interface FormProps {
 function SettingsForm({ target, config, onSave, onReset }: FormProps) {
   // Local draft state to avoid recalculating chart on every keystroke
   const [draft, setDraft] = useState({
+    ema9: config.ema9,
     ema20: config.ema20,
+    ema21: config.ema21,
     ema50: config.ema50,
     ema200: config.ema200,
     rsi: config.rsi,
@@ -98,7 +102,9 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
 
   useEffect(() => {
     setDraft({
+      ema9: config.ema9,
       ema20: config.ema20,
+      ema21: config.ema21,
       ema50: config.ema50,
       ema200: config.ema200,
       rsi: config.rsi,
@@ -115,7 +121,9 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
   }, [config, target]);
 
   function save() {
-    if (target === "ema20") onSave({ ema20: clamp(draft.ema20, 2, 500) });
+    if (target === "ema9") onSave({ ema9: clamp(draft.ema9, 2, 500) });
+    else if (target === "ema20") onSave({ ema20: clamp(draft.ema20, 2, 500) });
+    else if (target === "ema21") onSave({ ema21: clamp(draft.ema21, 2, 500) });
     else if (target === "ema50") onSave({ ema50: clamp(draft.ema50, 2, 500) });
     else if (target === "ema200") onSave({ ema200: clamp(draft.ema200, 2, 500) });
     else if (target === "rsi") onSave({ rsi: clamp(draft.rsi, 2, 100) });
@@ -139,7 +147,7 @@ function SettingsForm({ target, config, onSave, onReset }: FormProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {(target === "ema20" || target === "ema50" || target === "ema200") && (
+      {(target === "ema9" || target === "ema20" || target === "ema21" || target === "ema50" || target === "ema200") && (
         <Field
           label="Período"
           value={draft[target]}

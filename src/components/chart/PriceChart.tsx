@@ -117,7 +117,9 @@ interface HoverInfo {
 }
 
 interface LastValues {
+  ema9?: number;
   ema20?: number;
+  ema21?: number;
   ema50?: number;
   ema200?: number;
   rsi?: number;
@@ -140,7 +142,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const ema9Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const ema20Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const ema21Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const ema50Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const ema200Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const vwapRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -373,8 +377,20 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       priceLineStyle: 2,
     });
 
+    ema9Ref.current = chart.addSeries(LineSeries, {
+      color: INDICATOR_COLORS.ema9,
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
     ema20Ref.current = chart.addSeries(LineSeries, {
       color: INDICATOR_COLORS.ema20,
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
+    ema21Ref.current = chart.addSeries(LineSeries, {
+      color: INDICATOR_COLORS.ema21,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -660,7 +676,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       priceLinesMapRef.current.clear();
+      ema9Ref.current = null;
       ema20Ref.current = null;
+      ema21Ref.current = null;
       ema50Ref.current = null;
       ema200Ref.current = null;
       vwapRef.current = null;
@@ -895,7 +913,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   // Visibility — eye toggle (hidden state) + enabled state combined
   useEffect(() => {
     const v = (key: IndicatorKey) => indicators[key] && !hidden[key];
+    ema9Ref.current?.applyOptions({ visible: v("ema9") });
     ema20Ref.current?.applyOptions({ visible: v("ema20") });
+    ema21Ref.current?.applyOptions({ visible: v("ema21") });
     ema50Ref.current?.applyOptions({ visible: v("ema50") });
     ema200Ref.current?.applyOptions({ visible: v("ema200") });
     vwapRef.current?.applyOptions({ visible: v("vwap") });
@@ -915,7 +935,7 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
   // Recompute indicators when config changes (periods)
   useEffect(() => {
     updateEMAs();
-  }, [config.ema20, config.ema50, config.ema200]);
+  }, [config.ema9, config.ema20, config.ema21, config.ema50, config.ema200]);
 
   useEffect(() => {
     updateRSI();
@@ -1160,16 +1180,32 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     const c = candlesRef.current;
     if (c.length === 0) return;
     const cfg = configRef.current;
+    let last9: number | undefined;
     let last20: number | undefined;
+    let last21: number | undefined;
     let last50: number | undefined;
     let last200: number | undefined;
 
+    if (ema9Ref.current) {
+      const data = ema(c, cfg.ema9);
+      ema9Ref.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
+      );
+      last9 = data.at(-1)?.value;
+    }
     if (ema20Ref.current) {
       const data = ema(c, cfg.ema20);
       ema20Ref.current.setData(
         data.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
       );
       last20 = data.at(-1)?.value;
+    }
+    if (ema21Ref.current) {
+      const data = ema(c, cfg.ema21);
+      ema21Ref.current.setData(
+        data.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
+      );
+      last21 = data.at(-1)?.value;
     }
     if (ema50Ref.current) {
       const data = ema(c, cfg.ema50);
@@ -1194,7 +1230,9 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
     const lastVol = c.at(-1)?.volume;
     setLastValues((prev) => ({
       ...prev,
+      ema9: last9,
       ema20: last20,
+      ema21: last21,
       ema50: last50,
       ema200: last200,
       volume: lastVol,
@@ -2066,6 +2104,17 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
 
         {/* Indicator pills for the main pane (fixed position below price) */}
         <div className="mt-1 flex flex-col items-start gap-1">
+          {indicators.ema9 && (
+            <IndicatorPill
+              name={`EMA ${config.ema9}`}
+              value={lastValues.ema9 !== undefined ? formatPrice(lastValues.ema9) : undefined}
+              color={INDICATOR_COLORS.ema9}
+              hidden={hidden.ema9}
+              onToggleHide={() => toggleHidden("ema9")}
+              onSettings={() => setSettingsTarget("ema9")}
+              onRemove={() => removeIndicator("ema9")}
+            />
+          )}
           {indicators.ema20 && (
             <IndicatorPill
               name={`EMA ${config.ema20}`}
@@ -2075,6 +2124,17 @@ export function PriceChart({ symbol, timeframe, slotIndex = 0 }: Props) {
               onToggleHide={() => toggleHidden("ema20")}
               onSettings={() => setSettingsTarget("ema20")}
               onRemove={() => removeIndicator("ema20")}
+            />
+          )}
+          {indicators.ema21 && (
+            <IndicatorPill
+              name={`EMA ${config.ema21}`}
+              value={lastValues.ema21 !== undefined ? formatPrice(lastValues.ema21) : undefined}
+              color={INDICATOR_COLORS.ema21}
+              hidden={hidden.ema21}
+              onToggleHide={() => toggleHidden("ema21")}
+              onSettings={() => setSettingsTarget("ema21")}
+              onRemove={() => removeIndicator("ema21")}
             />
           )}
           {indicators.ema50 && (

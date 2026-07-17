@@ -5,7 +5,9 @@ import { persist } from "zustand/middleware";
 import type { Timeframe } from "@/lib/yahoo/types";
 
 export type IndicatorKey =
+  | "ema9"
   | "ema20"
+  | "ema21"
   | "ema50"
   | "ema200"
   | "rsi"
@@ -66,7 +68,9 @@ export interface FibonacciBox {
 }
 
 export interface IndicatorConfig {
+  ema9: number;
   ema20: number;
+  ema21: number;
   ema50: number;
   ema200: number;
   rsi: number;
@@ -294,17 +298,19 @@ export const DEFAULT_ICT_CONFIG: IctConfig = {
 };
 
 export const DEFAULT_INDICATORS: Record<IndicatorKey, boolean> = {
-  ema20: true, ema50: true, ema200: false, rsi: true, macd: false,
+  ema9: true, ema20: true, ema21: true, ema50: true, ema200: false, rsi: true, macd: false,
   volume: true, orb: true, ict: false, vwap: false, volumeProfile: false, fvg: false, stoch: false, ictMacros: false,
 };
 
 export const DEFAULT_HIDDEN: Record<IndicatorKey, boolean> = {
-  ema20: false, ema50: false, ema200: false, rsi: false, macd: false,
+  ema9: false, ema20: false, ema21: false, ema50: false, ema200: false, rsi: false, macd: false,
   volume: false, orb: false, ict: false, vwap: false, volumeProfile: false, fvg: false, stoch: false, ictMacros: false,
 };
 
 export const DEFAULT_CONFIG: IndicatorConfig = {
+  ema9: 9,
   ema20: 20,
+  ema21: 21,
   ema50: 50,
   ema200: 200,
   rsi: 14,
@@ -320,7 +326,9 @@ export const DEFAULT_CONFIG: IndicatorConfig = {
 };
 
 export const INDICATOR_COLORS: Record<IndicatorKey, string> = {
+  ema9: "#ec4899", // pink-500
   ema20: "#ffb74d",
+  ema21: "#14b8a6", // teal-500
   ema50: "#2962ff",
   ema200: "#ab47bc",
   rsi: "#ab47bc",

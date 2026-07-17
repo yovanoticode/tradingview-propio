@@ -19,7 +19,9 @@ interface Entry {
 }
 
 const ENTRIES: Entry[] = [
+  { key: "ema9", group: "Medias móviles", label: (c) => `EMA ${c.ema9}` },
   { key: "ema20", group: "Medias móviles", label: (c) => `EMA ${c.ema20}` },
+  { key: "ema21", group: "Medias móviles", label: (c) => `EMA ${c.ema21}` },
   { key: "ema50", group: "Medias móviles", label: (c) => `EMA ${c.ema50}` },
   { key: "ema200", group: "Medias móviles", label: (c) => `EMA ${c.ema200}` },
   { key: "volume", group: "Volumen", label: () => "Volumen" },
